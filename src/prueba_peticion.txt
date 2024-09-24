@@ -1,0 +1,39 @@
+# Define la URL del para crear un nuevo thread (/thread/create)
+$url = "http://localhost:3000/threads/create"
+
+# Define los headers para la solicitud
+$headers = @{ "Content-Type" = "application/json" }
+
+# Define el cuerpo de la solicitud con la pregunta 
+$body = @{ "prompt" = "¿Qué son las arquitecturas RAG?" } | ConvertTo-Json
+
+# Realiza la solicitud para crear el thread
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Para mostrar la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+# Guardamos el threadId y assistantId para usarlo después
+$threadId = $response.threadId
+$assistantId = $response.assistantId
+
+------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente(/threads/message)
+$url = "http://localhost:3000/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ "Content-Type" = "application/json" }
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Por qué son útiles?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
