@@ -1,12 +1,17 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-require('dotenv').config({ path: './.env' });
+const cors = require('cors');
 
-const apiRouter = require('./routes/api');
-const threadRouter = require('./routes/thread');
+const bodyParser = require('body-parser');
+require('dotenv').config({ path: './backend/.env' });
+
+const apiRouter = require('./backend/routes/api');
+const threadRouter = require('./backend/routes/thread');
 
 const app = express();
 const port = 3000;
+
+// Habilitar CORS para todas las rutas
+app.use(cors());
 
 // Middleware para parsear JSON
 app.use(bodyParser.json());

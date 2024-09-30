@@ -37,3 +37,14 @@ $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $bo
 
 # Muestra la respuesta completa por el terminal
 $response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------
+
+# Define la URL del endpoint con el threadId que quieres eliminar
+$url = "http://localhost:3000/threads/delete/$threadId"
+
+# Realiza la solicitud DELETE
+$response = Invoke-RestMethod -Uri $url -Method Delete
+
+# Muestra la respuesta completa
+$response

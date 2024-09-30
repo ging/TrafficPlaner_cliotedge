@@ -115,7 +115,33 @@ const sendMessageToThread = async (req, res) => {
     }
 };
 
+const deleteThread = async (req, res) => {
+    try{
+        const {threadId} = req.params;
+
+        if (!threadId) {
+            return res.status(400).send({ error: 'No se proporcionó un threadId en la solicitud.' });
+        }
+
+        // Borrar el thread usando su id
+        const response = await openai.beta.threads.del(threadId);
+
+        // Verificación si se ha eliminado correctamente
+        if (response.deleted) {
+            res.send({ message: `Thread con ID ${threadId} eliminado correctamente.` });
+        } else {
+            res.status(500).send({ error: 'No se pudo eliminar el thread.' });
+        }
+
+    } catch (error) {
+        console.error('Error borrando el thread:', error);
+        res.status(500).send({ error: 'Error borrando el thread.' });
+    }
+
+}
+
 module.exports = {
     createThread,
     sendMessageToThread,
+    deleteThread,
 };

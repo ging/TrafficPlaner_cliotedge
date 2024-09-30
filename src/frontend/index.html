@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>CLIoTEDGE LLM API</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <h1>CLIoTEDGE LLM API</h1>
+
+    <div class="container">
+        <div class="chatBot">
+            <header>
+                <h2>Asistente</h2>
+            </header>
+            <ul class="chatbox" id="chatContainer">
+                <li class="chat-incoming chat">
+                    <p>¡Hola! ¿Cómo puedo asistirte hoy?</p>
+                </li>
+            </ul>
+            <div class="chat-input">
+                <textarea rows="0" cols="50" placeholder="Envia un mensaje..."></textarea>
+                <button id="sendBTN">Enviar</button>
+                <button id="resetChatButton">Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="chatbot.js"></script>
+</body>
+
+</html>

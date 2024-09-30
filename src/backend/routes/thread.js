@@ -9,4 +9,6 @@ router.post('/create', controllerThread.createThread);
 // Enviar un mensaje en un thread existente
 router.post('/message', controllerThread.sendMessageToThread);
 
+router.delete('/delete/:threadId', controllerThread.deleteThread);
+
 module.exports = router;
