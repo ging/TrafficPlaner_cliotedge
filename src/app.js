@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 
+const logger = require('./backend/loggerWinston');
+
 const bodyParser = require('body-parser');
 require('dotenv').config({ path: './backend/.env' });
 
@@ -24,5 +26,5 @@ app.use('/threads', threadRouter);
 
 // Iniciar el servidor
 app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
+  logger.info(`Servidor escuchando en http://localhost:${port}`);
 });

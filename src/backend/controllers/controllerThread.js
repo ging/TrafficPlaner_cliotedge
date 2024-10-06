@@ -3,6 +3,9 @@ require('dotenv').config({ path: './.env' });
 
 const datos = require('../datos/datos_huerto.json')
 
+const logger = require('../loggerWinston');
+
+
 // Inicializar la API de OpenAI
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -62,7 +65,7 @@ const createThread = async (req, res) => {
         res.send({ threadId: thread.id, assistantId: assistant.id, response: assistantResponse });
 
     } catch (error) {
-        console.error('Error creando el thread:', error);
+        logger.error('Error creando el thread:', error);
         res.status(500).send({ error: 'Error creando el thread.' });
     }
 };
@@ -110,7 +113,7 @@ const sendMessageToThread = async (req, res) => {
         res.send({ response: assistantResponse });
 
     } catch (error) {
-        console.error('Error enviando mensaje al thread:', error);
+        logger.error('Error enviando mensaje al thread:', error);
         res.status(500).send({ error: 'Error enviando mensaje al thread.' });
     }
 };
@@ -134,7 +137,7 @@ const deleteThread = async (req, res) => {
         }
 
     } catch (error) {
-        console.error('Error borrando el thread:', error);
+        logger.error('Error borrando el thread:', error);
         res.status(500).send({ error: 'Error borrando el thread.' });
     }
 
