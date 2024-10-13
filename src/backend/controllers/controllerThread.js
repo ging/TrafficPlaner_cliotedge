@@ -5,6 +5,8 @@ const datos = require('../datos/datos_huerto.json')
 
 const logger = require('../loggerWinston');
 
+const { Conversation } = require('../models');
+
 
 // Inicializar la API de OpenAI
 const openai = new OpenAI({
@@ -61,12 +63,29 @@ const createThread = async (req, res) => {
         const messages = await openai.beta.threads.messages.list(thread.id);
         const assistantResponse = messages.data.find((m) => m.role === 'assistant')?.content[0];
 
+        // Guardar la nueva conversación en la base de datos como activa
+        await createConversation(thread.id);
+
         // Devolver el threadId y la respuesta del asistente para poder continuar la conversación en caso de querer mantener el hilo
         res.send({ threadId: thread.id, assistantId: assistant.id, response: assistantResponse });
 
     } catch (error) {
         logger.error('Error creando el thread:', error);
         res.status(500).send({ error: 'Error creando el thread.' });
+    }
+};
+
+
+// Crear una nueva conversación en la base de datos
+const createConversation = async (threadId) => {
+    try {
+        const newConversation = await Conversation.create({
+            threadId,
+            state: 'activa'
+        });
+        logger.info('Nueva conversación creada:', newConversation);
+    } catch (error) {
+        logger.error('Error creando la conversación:', error);
     }
 };
 
@@ -126,6 +145,9 @@ const deleteThread = async (req, res) => {
             return res.status(400).send({ error: 'No se proporcionó un threadId en la solicitud.' });
         }
 
+        // Cambiar el estado de la conversación a 'inactiva'
+        await updateConversation(threadId, 'inactiva');
+
         // Borrar el thread usando su id
         const response = await openai.beta.threads.del(threadId);
 
@@ -142,6 +164,22 @@ const deleteThread = async (req, res) => {
     }
 
 }
+
+// Actualizar el estado de una conversación en la base de datos
+const updateConversation = async (threadId, nuevoState) => {
+    try {
+        const conversation = await Conversation.findOne({ where: { threadId } });
+        if (conversation) {
+            conversation.state = nuevoState;
+            await conversation.save();
+            logger.info('Conversación actualizada:', conversation);
+        } else {
+            logger.warn('No se encontró la conversación.');
+        }
+    } catch (error) {
+        logger.error('Error actualizando la conversación:', error);
+    }
+};
 
 module.exports = {
     createThread,
