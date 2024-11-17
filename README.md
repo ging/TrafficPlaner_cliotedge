@@ -6,11 +6,12 @@
 
 
 ## Deployment 
-
+<!-- npm install
+cd src
+node app.js -->
 ```
 npm install
-cd src
-node app.js
+docker compose up --build
 ```
 
 Open index.html and start asking...
