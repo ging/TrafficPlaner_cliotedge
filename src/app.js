@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const morgan = require('morgan');
 
 const bodyParser = require('body-parser');
 require('dotenv').config({ path: './backend/.env' });
@@ -15,6 +16,19 @@ const port = 3000;
 
 // Habilitar CORS para todas las rutas
 app.use(cors());
+
+app.use(morgan('combined', {
+    stream: {
+        write: (message) => {
+            if (message.includes(' 4') || message.includes(' 5')) {
+                logger.error(message.trim()); // Log de errores HTTP
+            } else {
+                logger.info(message.trim()); // Log de otras solicitudes HTTP
+            }
+        }
+    }
+}));
+
 
 app.use(express.json())
 
