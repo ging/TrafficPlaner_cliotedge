@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const path = require('path');
+
 
 const bodyParser = require('body-parser');
 require('dotenv').config({ path: './backend/.env' });
@@ -11,8 +13,13 @@ const logger = require('./backend/loggerWinston');
 const apiRouter = require('./backend/routes/api');
 const threadRouter = require('./backend/routes/thread');
 
+const CONTEXT = process.env.CONTEXT || '';
+
+console.log(path.join('/', CONTEXT, 'api'));
+
 const app = express();
 const port = 3000;
+
 
 // Habilitar CORS para todas las rutas
 app.use(cors());
@@ -36,10 +43,10 @@ app.use(express.json())
 app.use(bodyParser.json());
 
 // Ruta de la petición a la API
-app.use('/api', apiRouter);
+app.use(path.join('/', CONTEXT, 'api'), apiRouter);
 
 // Rutas para las threads
-app.use('/threads', threadRouter);
+app.use(path.join('/',CONTEXT, 'threads'), threadRouter);
 
 
 
@@ -50,7 +57,9 @@ sequelize.sync()
         logger.info('Conectado a la base de datos');
         // Iniciar el servidor solo después de la conexión a la base de datos
         app.listen(port, () => {
-            logger.info(`Servidor escuchando en http://localhost:${port}`);
+            logger.info (`CONTEXT: ${CONTEXT}`);
+            const url = CONTEXT ? `${path.join('http://localhost:'+port, CONTEXT)}` : `http://localhost:${port}`;
+            logger.info(`Servidor escuchando en ${url}`);
         });
     })
     .catch(err => {
