@@ -2,7 +2,7 @@
 
 # Define la URL
 context="/cliotedge"
-url="http://localhost:3000$context/threads/create"
+url="http://localhost:3002$context/threads/create"
 
 # Define los headers para la solicitud
 headers="Content-Type: application/json"

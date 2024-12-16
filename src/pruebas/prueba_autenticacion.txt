@@ -1,11 +1,11 @@
 # Obtener el token
-$responseLogin = Invoke-RestMethod -Uri "http://localhost:3000/threads/login" -Method POST -Headers @{ "Content-Type" = "application/json" } -Body '{"username": "admin", "password": "password"}'
+$responseLogin = Invoke-RestMethod -Uri "http://localhost:3002/threads/login" -Method POST -Headers @{ "Content-Type" = "application/json" } -Body '{"username": "admin", "password": "password"}'
 $token = $responseLogin.token  # Ajusta esto según el nombre de la propiedad en tu respuesta JSON
 
 -------------------------------------------------------------------------------------------------------------------------
 
 # Define la URL para crear un nuevo thread (/threads/create)
-$url = "http://localhost:3000/threads/create"
+$url = "http://localhost:3002/threads/create"
 
 # Define los headers para la solicitud
 $headers = @{ 
@@ -29,7 +29,7 @@ $assistantId = $response.assistantId
 -------------------------------------------------------------------------------------------------------------------------
 
 # Define la URL para enviar un mensaje al thread existente (/threads/message)
-$url = "http://localhost:3000/threads/message"
+$url = "http://localhost:3002/threads/message"
 
 # Define los headers para la solicitud
 $headers = @{ 
@@ -53,7 +53,7 @@ $response | ConvertTo-Json -Depth 10 | Out-String
 -------------------------------------------------------------------------------------------------------------------------
 
 # Define la URL para enviar otro mensaje al thread existente (/threads/message)
-$url = "http://localhost:3000/threads/message"
+$url = "http://localhost:3002/threads/message"
 
 # Define los headers para la solicitud
 $headers = @{ 
@@ -77,7 +77,7 @@ $response | ConvertTo-Json -Depth 10 | Out-String
 -------------------------------------------------------------------------------------------------------
 
 # Define la URL del endpoint con el threadId que quieres eliminar
-$url = "http://localhost:3000/threads/delete/$threadId"
+$url = "http://localhost:3002/threads/delete/$threadId"
 
 # Crea el encabezado con el token Bearer
 $headers = @{

@@ -1,0 +1,18 @@
+services:
+  cliotedge-backend:
+    networks:
+      - martell
+    restart: unless-stopped
+
+  cliotedge-postgres:
+    networks:
+      - martell
+    restart: unless-stopped
+
+volumes:
+  cliotedge-postgres_data:
+
+networks:
+  martell:
+    external: true
+    name: martell

@@ -1,25 +1,25 @@
 services:
-  backend:
+  cliotedge-backend:
     build:
       context: ./src
-    container_name: backend
+    container_name: cliotedge-backend
     ports:
-      - "3000:3000"
+      - "3002:3002"
     env_file:
       - ./src/backend/.env  
     depends_on:
-      - postgres
+      - cliotedge-postgres
 
-  postgres:
+  cliotedge-postgres:
     image: postgres:17
-    container_name: postgres
+    container_name: cliotedge-postgres
     env_file:
       - ./src/backend/.env  
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - cliotedge-postgres_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  cliotedge-postgres_data:
 

@@ -3,7 +3,7 @@
 context="/cliotedge"
 
 # Obtener el token
-login_response=$(curl -s -X POST "http://localhost:3002$context/threads/login" \
+login_response=$(curl -s -X POST "https://servicios-ging.dit.upm.es$context/threads/login" \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}')
 
@@ -14,7 +14,7 @@ echo "Token obtenido: $token"
 # -----------------------------------------------------------------------------------
 
 # Define la URL para crear un nuevo thread
-create_url="http://localhost:3002$context/threads/create"
+create_url="https://servicios-ging.dit.upm.es$context/threads/create"
 
 # Define los headers para la solicitud
 headers=("Content-Type: application/json" "Authorization: Bearer $token")
@@ -47,7 +47,7 @@ echo "Assistant ID: $assistantId"
 # -----------------------------------------------------------------------------------
 
 # Define la URL para enviar un mensaje al thread existente
-message_url="http://localhost:3002$context/threads/message"
+message_url="https://servicios-ging.dit.upm.es$context/threads/message"
 
 # Define el cuerpo de la solicitud para el primer mensaje
 message_body1=$(cat <<EOF
@@ -94,7 +94,7 @@ echo "$message_response2" | jq .
 # -----------------------------------------------------------------------------------
 
 # Define la URL para eliminar el thread
-delete_url="http://localhost:3002$context/threads/delete/$threadId"
+delete_url="https://servicios-ging.dit.upm.es$context/threads/delete/$threadId"
 
 # Realiza la solicitud DELETE
 delete_response=$(curl -s -X DELETE "$delete_url" \

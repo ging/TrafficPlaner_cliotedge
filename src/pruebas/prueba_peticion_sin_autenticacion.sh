@@ -3,7 +3,7 @@
 context="/cliotedge"
 
 # Define la URL para crear un nuevo thread
-create_url="http://localhost:3000$context/threads/create"
+create_url="http://localhost:3002$context/threads/create"
 
 # Define los headers para la solicitud
 headers="Content-Type: application/json"
@@ -33,7 +33,7 @@ echo "Assistant ID: $assistantId"
 # -----------------------------------------------------------------------------------
 
 # Define la URL para enviar un mensaje al thread existente
-message_url="http://localhost:3000$context/threads/message"
+message_url="http://localhost:3002$context/threads/message"
 
 # Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
 message_body=$(cat <<EOF
@@ -55,7 +55,7 @@ echo "$message_response" | jq .
 # -----------------------------------------------------------------------------------
 
 # Define la URL del endpoint para eliminar el thread
-delete_url="http://localhost:3000$context/threads/delete/$threadId"
+delete_url="http://localhost:3002$context/threads/delete/$threadId"
 
 # Realiza la solicitud DELETE
 delete_response=$(curl -s -X DELETE "$delete_url")

@@ -18,7 +18,7 @@ const CONTEXT = process.env.CONTEXT || '';
 console.log(path.join('/', CONTEXT, 'api'));
 
 const app = express();
-const port = 3000;
+const port = 3002;
 
 
 // Habilitar CORS para todas las rutas

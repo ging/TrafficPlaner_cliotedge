@@ -1,5 +1,5 @@
 # Define la URL del para crear un nuevo thread (/thread/create)
-$url = "http://localhost:3000/threads/create"
+$url = "http://localhost:3002/threads/create"
 
 # Define los headers para la solicitud
 $headers = @{ "Content-Type" = "application/json" }
@@ -20,7 +20,7 @@ $assistantId = $response.assistantId
 ------------------------------------------------------------------------------------------------------
 
 # Define la URL para enviar un mensaje al thread existente(/threads/message)
-$url = "http://localhost:3000/threads/message"
+$url = "http://localhost:3002/threads/message"
 
 # Define los headers para la solicitud
 $headers = @{ "Content-Type" = "application/json" }
@@ -41,7 +41,7 @@ $response | ConvertTo-Json -Depth 10 | Out-String
 -------------------------------------------------------------------------------------------------------
 
 # Define la URL del endpoint con el threadId que quieres eliminar
-$url = "http://localhost:3000/threads/delete/$threadId"
+$url = "http://localhost:3002/threads/delete/$threadId"
 
 # Realiza la solicitud DELETE
 $response = Invoke-RestMethod -Uri $url -Method Delete

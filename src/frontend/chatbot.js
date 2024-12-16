@@ -1,7 +1,7 @@
 // Crear un thread nuevo
 async function createThreadAssistant() {
     try {
-        const response = await fetch('http://localhost:3000/threads/create', {
+        const response = await fetch('http://localhost:3002/threads/create', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -40,7 +40,7 @@ const sendMessage = async (message) => {
     }
 
     try {
-        const response = await fetch('http://localhost:3000/threads/message', {
+        const response = await fetch('http://localhost:3002/threads/message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -130,7 +130,7 @@ async function startNewThread() {
 // Eliminar un hilo por su identificador
 const deleteThread = async (threadId) => {
     try {
-        const response = await fetch(`http://localhost:3000/threads/delete/${threadId}`, {
+        const response = await fetch(`http://localhost:3002/threads/delete/${threadId}`, {
             method: 'DELETE',
         });
 
