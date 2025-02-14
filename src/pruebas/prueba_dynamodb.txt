@@ -1,0 +1,240 @@
+$context="/cliotedge"
+
+# Obtener el token
+$responseLogin = Invoke-RestMethod -Uri "http://localhost:3002$context/threads/login" -Method POST -Headers @{ "Content-Type" = "application/json" } -Body '{"username": "admin", "password": "password"}'
+$token = $responseLogin.token  
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para crear un nuevo thread (/threads/create)
+$url = "http://localhost:3002$context/threads/create"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con la pregunta 
+$body = @{ "prompt" = "¿Qué tipo de emisión tiene el coche con identificador 967A?" } | ConvertTo-Json
+
+# Realiza la solicitud para crear el thread
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Para mostrar la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+# Guardamos el threadId y assistantId para usarlo después
+$threadId = $response.threadId
+$assistantId = $response.assistantId
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántas motos con tipo de emisión 1 hay registrados?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántas bicis con tipo de emisión 1 hay registrados?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántas cámaras de tipo entrada hay?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Qué me puedes decir sobre el coche con id 967A?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántas detecciones hay hechas por la cámara con id 13"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántas detecciones hay hechas al vehículo con id ED70"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Qué me puedes decir sobre la detección del 2 de septiembre de 2024 a las 20:25:14?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+-------------------------------------------------------------------------------------------------------------------------
+
+# Define la URL para enviar un mensaje al thread existente (/threads/message)
+$url = "http://localhost:3002$context/threads/message"
+
+# Define los headers para la solicitud
+$headers = @{ 
+    "Content-Type" = "application/json"; 
+    "Authorization" = "Bearer $token"  # Incluye el token en el encabezado
+}
+
+# Define el cuerpo de la solicitud con el threadId, assistantId y el mensaje
+$body = @{
+    "threadId" = $threadId  # threadId dado al crear el thread
+    "assistantId" = $assistantId  # assistantId dado al crear el thread
+    "prompt" = "¿Cuántos camiones con tipo de emisión 2 hay?"
+} | ConvertTo-Json
+
+# Realiza la solicitud para enviar un mensaje
+$response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+
+# Muestra la respuesta completa por el terminal
+$response | ConvertTo-Json -Depth 10 | Out-String
+
+
+-------------------------------------------------------------------------------------------------------------------------
+
+
+# Define la URL del endpoint con el threadId que quieres eliminar
+$url = "http://localhost:3002$context/threads/delete/$threadId"
+
+# Crea el encabezado con el token Bearer
+$headers = @{
+    "Authorization" = "Bearer $token"
+}
+
+# Realiza la solicitud DELETE con el encabezado
+$response = Invoke-RestMethod -Uri $url -Method Delete -Headers $headers
+
+# Muestra la respuesta completa
+$response
