@@ -15,3 +15,17 @@ docker compose up --build
 ```
 
 Open index.html and start asking...
+
+
+## To import the data to the database
+
+Execute the migration
+```
+node src/backend/migrations/20250204101831-create-dynamodb-tables.js
+```
+
+Upload the data
+```	
+node src/backend/seeders/loadData.js
+```	
+
