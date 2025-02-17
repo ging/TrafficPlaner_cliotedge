@@ -14,35 +14,122 @@ const openai = new OpenAI({
 });
 
 
-//Función auxiliar para construir la consulta (Scan) para DynamoDB.
-// Si se proporcionan filtros, se crea la FilterExpression y se definen los valores.
+// Función que escanea una tabla DynamoDB utilizando Parallel Scan para mejorar la velocidad.
 
-const buildScanParams = (tableName, filters) => {
-    const params = {
-        TableName: tableName,
-    };
-    if (filters && Object.keys(filters).length > 0) {
-        const filterKeys = Object.keys(filters);
-        const filterExpressions = [];
-        const expressionAttributeValues = {};
-        const expressionAttributeNames = {};
+const parallelScan = async (tableName, filters = {}, segments = 4) => {
+    logger.info(`Iniciando ParallelScan en la tabla "${tableName}" con ${segments} segmentos.`);
 
-        filterKeys.forEach(key => {
-            // Definimos un alias para el nombre del atributo 
-            const attributeAlias = `#${key}`;
-            const valueAlias = `:${key}`;
-            filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
-            // Mapeamos el alias al nombre real
-            expressionAttributeNames[attributeAlias] = key;
-            // Definimos el valor correspondiente
-            expressionAttributeValues[valueAlias] = { S: filters[key].toString() };
-        });
+    // Creamos las tareas en paralelo
+    const tasks = Array.from({ length: segments }, (_, index) => scanSegment(tableName, filters, index, segments));
 
-        params.FilterExpression = filterExpressions.join(' AND ');
-        params.ExpressionAttributeValues = expressionAttributeValues;
-        params.ExpressionAttributeNames = expressionAttributeNames;
+    // Esperamos a que todas las tareas finalicen
+    const results = await Promise.all(tasks);
+
+    // Combinamos los resultados de todos los segmentos
+    const items = results.flat();
+
+    logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
+    return items;
+};
+
+// Función que escanea un segmento específico de la tabla con filtros.
+const scanSegment = async (tableName, filters, segment, totalSegments) => {
+    let items = [];
+    let lastEvaluatedKey = null;
+
+    do {
+        const params = {
+            TableName: tableName,
+            Segment: segment,
+            TotalSegments: totalSegments,
+            ExclusiveStartKey: lastEvaluatedKey
+        };
+
+        // Construcción de los filtros si los hay
+        if (filters && Object.keys(filters).length > 0) {
+            const filterKeys = Object.keys(filters);
+            const filterExpressions = [];
+            const expressionAttributeValues = {};
+            const expressionAttributeNames = {};
+
+            filterKeys.forEach(key => {
+                // Definimos un alias para el nombre del atributo 
+                const attributeAlias = `#${key}`;
+                const valueAlias = `:${key}`;
+                filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
+                // Mapeamos el alias al nombre real
+                expressionAttributeNames[attributeAlias] = key;
+                expressionAttributeValues[valueAlias] = { S: filters[key] };
+            });
+
+            params.FilterExpression = filterExpressions.join(' AND ');
+            params.ExpressionAttributeNames = expressionAttributeNames;
+            params.ExpressionAttributeValues = expressionAttributeValues;
+        }
+
+        try {
+            const result = await dynamoDB.send(new ScanCommand(params));
+            items = items.concat(result.Items || []);
+            lastEvaluatedKey = result.LastEvaluatedKey;
+
+            logger.info(`[Segmento ${segment}] Se recuperaron ${result.Items.length} registros.`);
+        } catch (error) {
+            logger.error(`Error en ParallelScan (segmento ${segment}):`, error);
+        }
+
+    } while (lastEvaluatedKey);
+
+    logger.info(`[Segmento ${segment}] Finalizado. Total registros: ${items.length}`);
+    return items;
+};
+
+
+// Función que envía un mensaje al thread de OpenAI en partes para evitar superar el límite de caracteres por si
+// hubiera consultas que superan el límite.
+
+const sendMessageWithPagination = async (threadId, assistantId, prompt, data, maxRecords = 1000) => {
+    logger.info("Iniciando paginación para evitar superar el límite.");
+
+    const keys = Object.keys(data);
+    let partCounter = 0;
+    let globalSummary = []; // Array para acumular todas las particiones
+
+    for (const table of keys) {
+        const tableData = data[table];
+        const totalRecords = tableData.length;
+
+        logger.info(`Tabla "${table}" tiene ${totalRecords} registros.`);
+
+        // Dividimos los registros en lotes de 'maxRecords'
+        for (let i = 0; i < totalRecords; i += maxRecords) {
+            partCounter++;
+            const chunk = tableData.slice(i, i + maxRecords);
+            globalSummary.push(...chunk); // Acumular los registros en un array global
+
+            const chunkContent = JSON.stringify(chunk);
+            const message = `Parte ${partCounter}:\n📖 Pregunta: "${prompt}"\n Datos (registros ${i + 1}-${Math.min(i + maxRecords, totalRecords)})\n\n${chunkContent}\n\n **IMPORTANTE:** No respondas todavía. Suma estos resultados con las partes anteriores para dar la respuesta final después.`;
+
+            await openai.beta.threads.messages.create(threadId, {
+                role: 'user',
+                content: message
+            });
+
+            logger.info(`Enviada la parte ${partCounter} de ${Math.ceil(totalRecords / maxRecords)}.`);
+        }
     }
-    return params;
+
+    //Envia un mensaje final con la suma de todas las particiones
+    const totalDetections = globalSummary.length; // Contamos el total de registros acumulados
+    const summaryMessage = `✅ **Resumen Final:**  
+                            Se han procesado un total de ${totalDetections} detecciones.  
+                            Ahora responde la pregunta: "${prompt}" usando esta cantidad total.`;
+
+    await openai.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content: summaryMessage
+    });
+
+    logger.info("Mensaje de resumen final enviado.");
 };
 
 
@@ -50,7 +137,6 @@ const buildScanParams = (tableName, filters) => {
 //Función que invoca al LLM para analizar el prompt del usuario y determinar:
 // - Qué tablas de DynamoDB deben consultarse.
 //- Para cada tabla, si se deben aplicar filtros.
-
 const analyzePromptForDBQuery = async (prompt) => {
     const dbPrompt = `
 Analiza la siguiente consulta del usuario y determina qué tablas de la base de datos DynamoDB deben ser consultadas y, para cada tabla, si es necesario, indica los filtros a aplicar.
@@ -81,12 +167,17 @@ Las tablas disponibles y ejemplos de registros son:
 
   Las fechas están en formato "YYYY_MM_DD_HH_MM_SS".
 
-Responde en formato JSON de la siguiente forma:
+
+  **Requisito Adicional:**  
+Indica si se espera una única respuesta o si se requieren múltiples partes para responder.
+
+Ejemplo de respuesta. Responde en formato JSON de la siguiente forma:
 {
   "tables": [
     {"tableName": "Vehicles", "filters": {"EmissionType": "1"} },
     {"tableName": "Detections", "filters": {"VehicleID": "4965"} }
-  ]
+  ],
+    "multipleParts": false
 }
 
 Si para alguna tabla no es necesario aplicar filtros, el objeto filters debe estar vacío, por ejemplo: {"filters": {}}.
@@ -97,23 +188,22 @@ Consulta: "${prompt}"
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [
-                {
-                    role: 'system',
-                    content:
-                        'Eres un asistente que ayuda a determinar qué tablas y filtros se deben aplicar para consultar una base de datos DynamoDB. Responde únicamente en JSON sin texto adicional.'
-                },
+                { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
                 { role: 'user', content: dbPrompt }
             ]
         });
+
         let resultText = response.choices[0].message.content;
-        // Eliminar delimitadores de bloque de código (por ejemplo, ```json)
-        resultText = resultText.replace(/```/g, '').trim();
-        // Extraer el primer bloque JSON que aparezca en la respuesta
+
+        // Limpieza de la respuesta para asegurar JSON válido
+        resultText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+
         const jsonStart = resultText.indexOf('{');
         const jsonEnd = resultText.lastIndexOf('}');
         if (jsonStart === -1 || jsonEnd === -1) {
             throw new Error('No se encontró un bloque JSON en la respuesta del LLM.');
         }
+
         const jsonText = resultText.substring(jsonStart, jsonEnd + 1);
         return JSON.parse(jsonText);
     } catch (error) {
@@ -128,7 +218,7 @@ const createThread = async (req, res) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
-            return res.status(400).send({ error: 'No se proporcionó un prompt en el cuerpo de la solicitud.' });
+            return res.status(400).send({ error: 'No se proporcionó un prompt.' });
         }
 
         // Analizamos el prompt para determinar si se requiere consulta a DB
@@ -137,63 +227,57 @@ const createThread = async (req, res) => {
         let dbResults = {};
         let warnings = {};
 
-        if (Array.isArray(tablesToQuery) && tablesToQuery.length > 0) {
-            // Ejecutar la consulta para cada tabla indicada
-            for (const tableInfo of tablesToQuery) {
-                const { tableName, filters } = tableInfo;
-                const params = buildScanParams(tableName, filters);
-                const command = new ScanCommand(params);
-                const result = await dynamoDB.send(command);
-                dbResults[tableName] = result.Items;
-                // Si no se aplicaron filtros, se incluye un aviso.
-                if (!filters || Object.keys(filters).length === 0) {
-                    warnings[tableName] = `Atención: No se aplicaron filtros. Se han consultado todos los registros de la tabla ${tableName}.`;
+        if (tablesToQuery.length > 0) {
+            for (const { tableName, filters } of tablesToQuery) {
+                const formattedFilters = {};
+                Object.entries(filters).forEach(([key, value]) => {
+                    formattedFilters[key] = String(value);
+                });
+
+                const result = await parallelScan(tableName, formattedFilters);
+                dbResults[tableName] = result;
+
+                if (!Object.keys(filters).length) {
+                    warnings[tableName] = `No se aplicaron filtros en "${tableName}".`;
                 }
             }
         }
 
-        // Construir las instrucciones para el asistente.
-        // Si se obtuvo información de la base de datos, se la incluye en las instrucciones;
-        // de lo contrario, se usa un mensaje por defecto.
-        const instructions = Object.keys(dbResults).length > 0
-            ? `Eres un experto en tráfico y movilidad. Utiliza la siguiente información proveniente de la base de datos para responder: ${JSON.stringify(dbResults)}. Responde de forma precisa y detallada a las preguntas relacionadas con el tráfico, limitándote a los datos disponibles.`
-            : `Eres un experto en tráfico y movilidad. Responde de forma precisa y detallada a las preguntas relacionadas con el tráfico.`;
-
-        // Crear el thread de conversación
         const thread = await openai.beta.threads.create({});
         const assistant = await openai.beta.assistants.create({
-            instructions: instructions,
-            model: 'gpt-4o',
+            instructions: `
+                Eres un experto en tráfico y movilidad.  
+                
+                **Instrucción General:**  
+                Responde a la pregunta: "${prompt}" usando todos los datos proporcionados.  
+
+                **Instrucción Crítica:**  
+                Siempre responde **solo a la última pregunta recibida**.  
+                Si se envía una nueva pregunta, **ignora todo el contexto anterior**. 
+
+                **Importante:**  
+                Si recibes múltiples partes, **espera hasta tenerlas todas**.  
+                Si recibes **una sola parte**, **responde directamente**.  
+            `,
+            model: 'gpt-4o'
         });
 
-        // Crear el primer mensaje del usuario en el thread
-        await openai.beta.threads.messages.create(thread.id, {
-            role: 'user',
-            content: prompt,
+        await sendMessageWithPagination(thread.id, assistant.id, prompt, dbResults);
+
+        const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistant.id });
+
+        await new Promise(resolve => {
+            const interval = setInterval(async () => {
+                const runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+                if (runStatus.status === 'completed') {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 1000);
         });
-
-        // Ejecutar el thread y obtener la respuesta del asistente
-        const run = await openai.beta.threads.runs.create(thread.id, {
-            assistant_id: assistant.id,
-        });
-
-        // Función para esperar a que el run se complete
-        const checkRun = async () => {
-            return new Promise((resolve) => {
-                const interval = setInterval(async () => {
-                    const retrieveRun = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-                    if (retrieveRun.status === 'completed') {
-                        clearInterval(interval);
-                        resolve(retrieveRun);
-                    }
-                }, 1000);
-            });
-        };
-        await checkRun();
-
         // Recuperar todos los mensajes del thread
         const messages = await openai.beta.threads.messages.list(thread.id);
-        const assistantResponse = messages.data.find((m) => m.role === 'assistant')?.content[0];
+        const assistantResponse = messages.data.find(m => m.role === 'assistant')?.content[0];
 
         // Guardar la conversación en la base de datos como activa
         await createConversation(thread.id);
@@ -207,75 +291,66 @@ const createThread = async (req, res) => {
             dbData: dbResults,
             queryInterpretation: dbQueryInfo
         });
+
     } catch (error) {
-        logger.error('Error creando el thread o consultando la DB:', error);
-        res.status(500).send({ error: 'Error creando el thread o consultando la base de datos.' });
+        logger.error('Error en createThread:', error);
+        res.status(500).send({ error: 'Error en la creación del thread.' });
     }
 };
 
+// Función para enviar un mensaje al thread existente 
 const sendMessageToThread = async (req, res) => {
     try {
-        let { threadId, assistantId, prompt } = req.body;
+        const { threadId, assistantId, prompt } = req.body;
+
         if (!threadId || !assistantId || !prompt) {
-            return res.status(400).send({ error: 'Faltan datos en la solicitud (threadId, assistantId, prompt).' });
+            return res.status(400).send({ error: 'Faltan parámetros.' });
         }
 
-        // Analizamos el nuevo prompt para ver si se requiere consulta a la base de datos.
+        const clearContextPrompt = `**Nueva Pregunta**  
+                                    Por favor, olvida todo el contexto anterior y responde únicamente a esta nueva pregunta: "${prompt}"`;
+        
+
         const dbQueryInfo = await analyzePromptForDBQuery(prompt);
-        const tablesToQuery = dbQueryInfo.tables;
         let dbResults = {};
-        let warnings = {};
 
-        if (Array.isArray(tablesToQuery) && tablesToQuery.length > 0) {
-            // Ejecutamos la consulta para cada tabla indicada.
-            for (const tableInfo of tablesToQuery) {
-                const { tableName, filters } = tableInfo;
-                const params = buildScanParams(tableName, filters);
-                const command = new ScanCommand(params);
-                const result = await dynamoDB.send(command);
-                dbResults[tableName] = result.Items;
-                if (!filters || Object.keys(filters).length === 0) {
-                    warnings[tableName] = `Atención: No se aplicaron filtros. Se han consultado todos los registros de la tabla ${tableName}.`;
-                }
+        if (dbQueryInfo.tables.length > 0) {
+            for (const { tableName, filters } of dbQueryInfo.tables) {
+                const formattedFilters = {};
+                Object.entries(filters).forEach(([key, value]) => {
+                    formattedFilters[key] = String(value);
+                });
+
+                const result = await parallelScan(tableName, formattedFilters);
+                dbResults[tableName] = result;
             }
-            // Se reformula el prompt para que el asistente ignore el contexto anterior.
-            prompt = `Ignora todo el contexto previo. Datos actualizados de la base de datos: ${JSON.stringify(dbResults)}.\n\nPregunta: ${prompt}`;
         }
 
-        await openai.beta.threads.messages.create(threadId, {
-            role: 'user',
-            content: prompt,
-        });
+        await sendMessageWithPagination(threadId, assistantId, clearContextPrompt, dbResults);
 
-        const run = await openai.beta.threads.runs.create(threadId, {
-            assistant_id: assistantId,
-        });
+        const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
 
-        const checkRun = async () => {
-            return new Promise((resolve) => {
-                const interval = setInterval(async () => {
-                    const retrieveRun = await openai.beta.threads.runs.retrieve(threadId, run.id);
-                    if (retrieveRun.status === 'completed') {
-                        clearInterval(interval);
-                        resolve(retrieveRun);
-                    }
-                }, 1000);
-            });
-        };
-        await checkRun();
+        await new Promise(resolve => {
+            const interval = setInterval(async () => {
+                const runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+                if (runStatus.status === 'completed') {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 1000);
+        });
 
         // Recupera los mensajes y extraer la respuesta.
         const messages = await openai.beta.threads.messages.list(threadId);
-        const assistantResponse = messages.data.find((m) => m.role === 'assistant')?.content[0];
+        const assistantResponse = messages.data.find(m => m.role === 'assistant')?.content[0];
 
         res.send({ response: assistantResponse });
+
     } catch (error) {
         logger.error('Error enviando mensaje al thread:', error);
         res.status(500).send({ error: 'Error enviando mensaje al thread.' });
     }
 };
-
-
 
 
 // Función que elimina un thread de la base de datos.
