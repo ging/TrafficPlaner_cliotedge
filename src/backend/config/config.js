@@ -2,11 +2,11 @@ const process = require('process');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 
 const dynamoDB = new DynamoDBClient({
-    region: 'eu-south-2',
-    endpoint: process.env.DYNAMODB_ENDPOINT || 'http://dynamodb-local:8000',
+    region: process.env.DYNAMODB_REGION,
+    endpoint: process.env.DYNAMODB_ENDPOINT,
     credentials: {
-        accessKeyId: 'fakeMyKeyId',
-        secretAccessKey: 'fakeMySecretKey'
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID,
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY
     }
 });
 

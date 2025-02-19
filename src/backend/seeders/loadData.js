@@ -8,11 +8,11 @@ const logger = require('../loggerWinston');
 
 // Configurar conexión con DynamoDB Local
 const dynamoDB = new DynamoDBClient({
-    region: 'eu-south-2',
-    endpoint: 'http://localhost:8000',
+    region: process.env.DYNAMODB_REGION,
+    endpoint: process.env.DYNAMODB_ENDPOINT,
     credentials: {
-        accessKeyId: 'fakeMyKeyId',
-        secretAccessKey: 'fakeMySecretKey'
+        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID,
+        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY
     }
 });
 
