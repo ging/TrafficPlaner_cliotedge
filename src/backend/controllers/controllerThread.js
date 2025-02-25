@@ -84,55 +84,6 @@ const scanSegment = async (tableName, filters, segment, totalSegments) => {
 };
 
 
-// Función que envía un mensaje al thread de OpenAI en partes para evitar superar el límite de caracteres por si
-// hubiera consultas que superan el límite.
-
-const sendMessageWithPagination = async (threadId, assistantId, prompt, data, maxRecords = 1000) => {
-    logger.info("Iniciando paginación para evitar superar el límite.");
-
-    const keys = Object.keys(data);
-    let partCounter = 0;
-    let globalSummary = []; // Array para acumular todas las particiones
-
-    for (const table of keys) {
-        const tableData = data[table];
-        const totalRecords = tableData.length;
-
-        logger.info(`Tabla "${table}" tiene ${totalRecords} registros.`);
-
-        // Dividimos los registros en lotes de 'maxRecords'
-        for (let i = 0; i < totalRecords; i += maxRecords) {
-            partCounter++;
-            const chunk = tableData.slice(i, i + maxRecords);
-            globalSummary.push(...chunk); // Acumular los registros en un array global
-
-            const chunkContent = JSON.stringify(chunk);
-            const message = `Parte ${partCounter}:\n📖 Pregunta: "${prompt}"\n Datos (registros ${i + 1}-${Math.min(i + maxRecords, totalRecords)})\n\n${chunkContent}\n\n **IMPORTANTE:** No respondas todavía. Suma estos resultados con las partes anteriores para dar la respuesta final después.`;
-
-            await openai.beta.threads.messages.create(threadId, {
-                role: 'user',
-                content: message
-            });
-
-            logger.info(`Enviada la parte ${partCounter} de ${Math.ceil(totalRecords / maxRecords)}.`);
-        }
-    }
-
-    //Envia un mensaje final con la suma de todas las particiones
-    const totalDetections = globalSummary.length; // Contamos el total de registros acumulados
-    const summaryMessage = `✅ **Resumen Final:**  
-                            Se han procesado un total de ${totalDetections} detecciones.  
-                            Ahora responde la pregunta: "${prompt}" usando esta cantidad total.`;
-
-    await openai.beta.threads.messages.create(threadId, {
-        role: 'user',
-        content: summaryMessage
-    });
-
-    logger.info("Mensaje de resumen final enviado.");
-};
-
-
 
 //Función que invoca al LLM para analizar el prompt del usuario y determinar:
 // - Qué tablas de DynamoDB deben consultarse.
@@ -262,8 +213,11 @@ const createThread = async (req, res) => {
             model: 'gpt-4o'
         });
 
-        await sendMessageWithPagination(thread.id, assistant.id, prompt, dbResults);
-
+        await openai.beta.threads.messages.create(thread.id, {
+            role: 'user',
+            content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
+        });
+        
         const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistant.id });
 
         await new Promise(resolve => {
@@ -326,8 +280,11 @@ const sendMessageToThread = async (req, res) => {
             }
         }
 
-        await sendMessageWithPagination(threadId, assistantId, clearContextPrompt, dbResults);
-
+        await openai.beta.threads.messages.create(threadId, {
+            role: 'user',
+            content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
+        });
+        
         const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
 
         await new Promise(resolve => {
