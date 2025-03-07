@@ -2,7 +2,6 @@
 const { OpenAI } = require('openai');
 require('dotenv').config({ path: './.env' });
 
-const datos = require('../datos/datos_huerto.json');
 const logger = require('../loggerWinston');
 const { Conversation } = require('../models');
 const { dynamoDB } = require('../config/config.js');
@@ -16,16 +15,19 @@ const openai = new OpenAI({
 
 // Función que escanea una tabla DynamoDB utilizando Parallel Scan para mejorar la velocidad.
 
-const parallelScan = async (tableName, filters = {}, segments = 4) => {
-    logger.info(`Iniciando ParallelScan en la tabla "${tableName}" con ${segments} segmentos.`);
+const parallelScan = async (tableName, filters = {}, segments = 4, operation = "scan") => {
+    logger.info(`Iniciando consulta en la tabla "${tableName}" con operación: ${operation}`);
 
-    // Creamos las tareas en paralelo
-    const tasks = Array.from({ length: segments }, (_, index) => scanSegment(tableName, filters, index, segments));
+    if (operation === "count") {
+        // Realiza solo una consulta COUNT sin dividir en segmentos
+        const count = await scanSegment(tableName, filters, 0, 1, "count");
+        logger.info(`Consulta COUNT finalizada. Total registros: ${count}`);
+        return count;
+    }
 
-    // Esperamos a que todas las tareas finalicen
+    // Si no es un conteo, usar parallel scan con segmentos
+    const tasks = Array.from({ length: segments }, (_, index) => scanSegment(tableName, filters, index, segments, "scan"));
     const results = await Promise.all(tasks);
-
-    // Combinamos los resultados de todos los segmentos
     const items = results.flat();
 
     logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
@@ -33,19 +35,19 @@ const parallelScan = async (tableName, filters = {}, segments = 4) => {
 };
 
 // Función que escanea un segmento específico de la tabla con filtros.
-const scanSegment = async (tableName, filters, segment, totalSegments) => {
+const scanSegment = async (tableName, filters, segment, totalSegments, operation = "scan") => {
+    let count = 0;
     let items = [];
     let lastEvaluatedKey = null;
 
     do {
         const params = {
             TableName: tableName,
-            Segment: segment,
-            TotalSegments: totalSegments,
             ExclusiveStartKey: lastEvaluatedKey
         };
 
         // Construcción de los filtros si los hay
+
         if (filters && Object.keys(filters).length > 0) {
             const filterKeys = Object.keys(filters);
             const filterExpressions = [];
@@ -57,7 +59,7 @@ const scanSegment = async (tableName, filters, segment, totalSegments) => {
                 const attributeAlias = `#${key}`;
                 const valueAlias = `:${key}`;
                 filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
-                // Mapeamos el alias al nombre real
+                    // Mapeamos el alias al nombre real
                 expressionAttributeNames[attributeAlias] = key;
                 expressionAttributeValues[valueAlias] = { S: filters[key] };
             });
@@ -67,20 +69,31 @@ const scanSegment = async (tableName, filters, segment, totalSegments) => {
             params.ExpressionAttributeValues = expressionAttributeValues;
         }
 
-        try {
-            const result = await dynamoDB.send(new ScanCommand(params));
-            items = items.concat(result.Items || []);
-            lastEvaluatedKey = result.LastEvaluatedKey;
+        if (operation === "count") {
+            params.Select = "COUNT"; 
+        }
 
-            logger.info(`[Segmento ${segment}] Se recuperaron ${result.Items.length} registros.`);
+        try {
+            const command = operation === "count" ? new ScanCommand(params) : new ScanCommand(params);
+            const result = await dynamoDB.send(command);
+
+            if (operation === "count") {
+                count += result.Count; 
+            } else {
+                items = items.concat(result.Items || []);
+            }
+
+            lastEvaluatedKey = result.LastEvaluatedKey;
+            logger.info(`[Segmento ${segment}] Se recuperaron ${operation === "count" ? result.Count : result.Items?.length || 0} registros.`);
         } catch (error) {
             logger.error(`Error en ParallelScan (segmento ${segment}):`, error);
         }
 
     } while (lastEvaluatedKey);
 
-    logger.info(`[Segmento ${segment}] Finalizado. Total registros: ${items.length}`);
-    return items;
+    logger.info(`[Segmento ${segment}] Finalizado. Total registros: ${operation === "count" ? count : items.length}`);
+    
+    return operation === "count" ? count : items;
 };
 
 
@@ -91,6 +104,10 @@ const scanSegment = async (tableName, filters, segment, totalSegments) => {
 const analyzePromptForDBQuery = async (prompt) => {
     const dbPrompt = `
 Analiza la siguiente consulta del usuario y determina qué tablas de la base de datos DynamoDB deben ser consultadas y, para cada tabla, si es necesario, indica los filtros a aplicar.
+
+IMPORTANTE:  
+- Si la consulta del usuario implica un **conteo** (por ejemplo: "¿Cuántos vehículos hay?", "Dame el total de detecciones"), entonces agrega el campo "operation": "count".
+- Si es una consulta normal, usa "operation": "scan".
 
 Las tablas disponibles y ejemplos de registros son:
 
@@ -109,7 +126,7 @@ Las tablas disponibles y ejemplos de registros son:
   {"Item": {"VehicleID": "2B07", "EmissionType": "3", "VehicleType": "Bike"}}
   {"Item": {"VehicleID": "1DA5", "EmissionType": "1", "VehicleType": "Truck"}}
 
-
+  
 
 - Detections  
   Ejemplos:
@@ -119,16 +136,15 @@ Las tablas disponibles y ejemplos de registros son:
   Las fechas están en formato "YYYY_MM_DD_HH_MM_SS".
 
 
-  **Requisito Adicional:**  
+  Requisito Adicional:  
 Indica si se espera una única respuesta o si se requieren múltiples partes para responder.
 
 Ejemplo de respuesta. Responde en formato JSON de la siguiente forma:
 {
   "tables": [
-    {"tableName": "Vehicles", "filters": {"EmissionType": "1"} },
-    {"tableName": "Detections", "filters": {"VehicleID": "4965"} }
+    {"tableName": "Vehicles", "filters": {"EmissionType": "1"}, "operation": "count"}
   ],
-    "multipleParts": false
+  "multipleParts": false
 }
 
 Si para alguna tabla no es necesario aplicar filtros, el objeto filters debe estar vacío, por ejemplo: {"filters": {}}.
@@ -179,19 +195,19 @@ const createThread = async (req, res) => {
         let warnings = {};
 
         if (tablesToQuery.length > 0) {
-            for (const { tableName, filters } of tablesToQuery) {
+            for (const { tableName, filters, operation } of dbQueryInfo.tables) {
                 const formattedFilters = {};
                 Object.entries(filters).forEach(([key, value]) => {
                     formattedFilters[key] = String(value);
                 });
-
-                const result = await parallelScan(tableName, formattedFilters);
-                dbResults[tableName] = result;
-
+            
+                const result = await parallelScan(tableName, formattedFilters, 4, operation);
+                dbResults[tableName] = result; // Guardar solo el conteo si es COUNT
+            
                 if (!Object.keys(filters).length) {
                     warnings[tableName] = `No se aplicaron filtros en "${tableName}".`;
                 }
-            }
+            }            
         }
 
         const thread = await openai.beta.threads.create({});
@@ -208,7 +224,10 @@ const createThread = async (req, res) => {
 
                 **Importante:**  
                 Si recibes múltiples partes, **espera hasta tenerlas todas**.  
-                Si recibes **una sola parte**, **responde directamente**.  
+                Si recibes **una sola parte**, **responde directamente**. 
+                
+                **Instrucción de la base de datos:**
+                Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
             model: 'gpt-4o'
         });
@@ -269,15 +288,15 @@ const sendMessageToThread = async (req, res) => {
         let dbResults = {};
 
         if (dbQueryInfo.tables.length > 0) {
-            for (const { tableName, filters } of dbQueryInfo.tables) {
+            for (const { tableName, filters, operation } of dbQueryInfo.tables) {
                 const formattedFilters = {};
                 Object.entries(filters).forEach(([key, value]) => {
                     formattedFilters[key] = String(value);
                 });
-
-                const result = await parallelScan(tableName, formattedFilters);
+            
+                const result = await parallelScan(tableName, formattedFilters, 4, operation);
                 dbResults[tableName] = result;
-            }
+            }            
         }
 
         await openai.beta.threads.messages.create(threadId, {
