@@ -189,7 +189,7 @@ $headers = @{
 $body = @{
     "threadId" = $threadId  # threadId dado al crear el thread
     "assistantId" = $assistantId  # assistantId dado al crear el thread
-    "prompt" = "¿Qué me puedes decir sobre la detección de esta fecha 2024_11_27_20_07_22"
+    "prompt" = "¿Qué me puedes decir sobre la detección de esta fecha 2024_11_27_20_07_22?"
 } | ConvertTo-Json
 
 # Realiza la solicitud para enviar un mensaje

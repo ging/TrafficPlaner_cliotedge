@@ -14,7 +14,7 @@ npm install
 docker compose up --build
 ```
 
-Open index.html and start asking...
+Open http://localhost:3002 and start asking...
 
 
 ## To import the data to the database

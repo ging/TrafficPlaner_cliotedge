@@ -1,10 +1,46 @@
+// Variable para almacenar el token de autenticación
+let authToken = null;
+
+// Función para hacer login y obtener el token
+async function login() {
+    try {
+        const response = await fetch(`${window.API_URL}${window.API_CONTEXT}/threads/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: "admin",
+                password: "password"
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Error en el login');
+        }
+
+        const data = await response.json();
+        authToken = data.token; // Guarda el token en la variable global
+        console.log("Token obtenido:", authToken);
+    } catch (error) {
+        console.error("Error durante el login:", error);
+    }
+}
+
+
+const context = window.API_CONTEXT;
+
 // Crear un thread nuevo
 async function createThreadAssistant() {
+    // Si no hay token, se ejecuta el login primero
+    if (!authToken) {
+        await login();
+    }
+
     try {
-        const response = await fetch('http://localhost:3002/threads/create', {
+        const response = await fetch(`${window.API_URL}${window.API_CONTEXT}/threads/create`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + authToken  // Se incluye el token en la cabecera
             },
             body: JSON.stringify({
                 prompt: "Inicia el asistente"
@@ -27,26 +63,22 @@ let assistantId = null;
 
 // Enviar un mensaje al thread creado
 const sendMessage = async (message) => {
-    // Verificamos si threadId y assistantId están definidos
+    // Si no hay un thread, se crea uno
     if (!threadId) {
-        // Si no existe, se crea un thread
-        [threadId, assistantId] = await createThreadAssistant(); 
-    }
-
-    // Tiene que haber un mensaje
-    if (!message) {
-        console.error("El mensaje no puede estar vacío.");
-        return;
+        [threadId, assistantId] = await createThreadAssistant();
     }
 
     try {
-        const response = await fetch('http://localhost:3002/threads/message', {
+        const response = await fetch(`${window.API_URL}${window.API_CONTEXT}/threads/message`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + authToken
+            },
             body: JSON.stringify({
-                threadId, 
-                assistantId, 
-                prompt: message 
+                threadId,
+                assistantId,
+                prompt: message
             }),
         });
 
@@ -55,7 +87,7 @@ const sendMessage = async (message) => {
         }
 
         const data = await response.json();
-        console.log("Message sent! Response:", data);
+        console.log("Mensaje enviado! Respuesta:", data);
         return data;
     } catch (error) {
         console.error("Error enviando el mensaje:", error);
@@ -68,10 +100,10 @@ const chatbox = document.querySelector(".chatbox");
 
 let userMessage;
 
-// Al inicar la página se crea una conversación
+// Al iniciar la página se crea una conversación
 (async () => {
     console.log('Creating thread...⏳');
-    [threadId, assistantId] = await createThreadAssistant(); 
+    [threadId, assistantId] = await createThreadAssistant();
     console.log('Thread created! ✅');
 })();
 
@@ -80,17 +112,16 @@ const createChatLi = (message, className) => {
     chatLi.classList.add("chat", className);
     chatLi.innerHTML = `<p>${message}</p>`;
     return chatLi;
-}
+};
 
 const generateResponse = async (incomingChatLi) => {
     const messageElement = incomingChatLi.querySelector("p");
 
     console.log(`Sending message...⏳ ${userMessage}`);
     try {
-        const response = await sendMessage(userMessage); 
+        const response = await sendMessage(userMessage);
         console.log('Response:', response);
 
-        // Verificar si response.text.annotations[0].value existe de forma segura
         const assistantResponse = response?.response?.text || 'No se pudo obtener una respuesta válida del servidor.';
         const finalMessage = assistantResponse.annotations?.[0]?.value || assistantResponse.value || assistantResponse;
 
@@ -100,7 +131,7 @@ const generateResponse = async (incomingChatLi) => {
         messageElement.textContent = 'Oops! Algo salió mal. Por favor, inténtalo de nuevo.';
     }
     chatbox.scrollTo(0, chatbox.scrollHeight);
-}
+};
 
 const handleChat = () => {
     userMessage = chatInput.value.trim();
@@ -116,22 +147,25 @@ const handleChat = () => {
         chatbox.scrollTo(0, chatbox.scrollHeight);
         generateResponse(incomingChatLi);
     }, 600);
-}
+};
 
 sendChatBtn.addEventListener("click", handleChat);
 
 // Resetear el chat y crear un nuevo hilo
 async function startNewThread() {
     console.log('Creating thread...⏳');
-    [threadId, assistantId] = await createThreadAssistant(); // Asignar valores a las variables
+    [threadId, assistantId] = await createThreadAssistant();
     console.log('Thread created! ✅');
 }
 
 // Eliminar un hilo por su identificador
 const deleteThread = async (threadId) => {
     try {
-        const response = await fetch(`http://localhost:3002/threads/delete/${threadId}`, {
+        const response = await fetch(`${window.API_URL}${window.API_CONTEXT}/threads/delete/${threadId}`, {
             method: 'DELETE',
+            headers: {
+                'Authorization': 'Bearer ' + authToken
+            },
         });
 
         if (!response.ok) {
@@ -144,6 +178,7 @@ const deleteThread = async (threadId) => {
         console.error("Error eliminando el thread:", error);
     }
 };
+
 
 // Resetear el chat y crear un nuevo hilo
 async function resetChat() {

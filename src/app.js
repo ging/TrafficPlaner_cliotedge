@@ -42,6 +42,24 @@ app.use(express.json())
 // Middleware para parsear JSON
 app.use(bodyParser.json());
 
+
+// Configuración para el frontend con EJS 
+
+// Configurar EJS y la carpeta de vistas
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'frontend'));
+
+// Servir archivos estáticos (para archivos como chatbot.js, style.css)
+app.use(express.static(path.join(__dirname, 'frontend')));
+
+// Ruta para renderizar la vista principal (index.ejs)
+app.get('/', (req, res) => {
+    res.render('index', {
+        apiUrl: process.env.API_URL || 'http://localhost:3002',
+        context: process.env.CONTEXT || ''
+    });
+});
+
 // Ruta de la petición a la API
 app.use(path.join('/', CONTEXT, 'api'), apiRouter);
 
@@ -57,8 +75,8 @@ sequelize.sync()
         logger.info('Conectado a la base de datos');
         // Iniciar el servidor solo después de la conexión a la base de datos
         app.listen(port, () => {
-            logger.info (`CONTEXT: ${CONTEXT}`);
-            const url = CONTEXT ? `${path.join('http://localhost:'+port, CONTEXT)}` : `http://localhost:${port}`;
+            logger.info(`CONTEXT: ${CONTEXT}`);
+            const url = CONTEXT ? `${path.join('http://localhost:' + port)}` : `http://localhost:${port}`;
             logger.info(`Servidor escuchando en ${url}`);
         });
     })
