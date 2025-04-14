@@ -6,3 +6,4 @@ error.log
 src/backend/datos/Camaras
 src/backend/datos/Detecciones de Vehiculos
 src/backend/datos/Vehiculos
+src/backend/datos

@@ -19,13 +19,13 @@ Open http://localhost:3002 and start asking...
 
 ## To import the data to the database
 
-Execute the migration
+Execute the migration from src/backend
 ```
-node src/backend/migrations/20250204101831-create-dynamodb-tables.js
+node migrations/20250414171916-create-dynamodb-datos3cantos.js
 ```
 
 Upload the data
 ```	
-node src/backend/seeders/loadData.js
+node seeders/loadData.js
 ```	
 
