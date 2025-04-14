@@ -19,19 +19,26 @@ const parallelScan = async (tableName, filters = {}, segments = 4, operation = "
     logger.info(`Iniciando consulta en la tabla "${tableName}" con operación: ${operation}`);
 
     if (operation === "count") {
-        // Realiza solo una consulta COUNT sin dividir en segmentos
-        const count = await scanSegment(tableName, filters, 0, 1, "count");
+        // Paraleliza
+        const tasks = Array.from({ length: segments }, (_, index) =>
+            scanSegment(tableName, filters, index, segments, "count")
+        );
+        const results = await Promise.all(tasks);
+        const count = results.reduce((total, segmentCount) => total + segmentCount, 0);
         logger.info(`Consulta COUNT finalizada. Total registros: ${count}`);
         return count;
+    } else {
+        // Si no es un conteo, usar parallel scan con segmentos
+        const tasks = Array.from({ length: segments }, (_, index) =>
+            scanSegment(tableName, filters, index, segments, "scan")
+        );
+        const results = await Promise.all(tasks);
+        const items = results.flat();
+
+        logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
+        return items;
     }
 
-    // Si no es un conteo, usar parallel scan con segmentos
-    const tasks = Array.from({ length: segments }, (_, index) => scanSegment(tableName, filters, index, segments, "scan"));
-    const results = await Promise.all(tasks);
-    const items = results.flat();
-
-    logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
-    return items;
 };
 
 // Función que escanea un segmento específico de la tabla con filtros.
@@ -46,31 +53,51 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
             ExclusiveStartKey: lastEvaluatedKey
         };
 
-        // Construcción de los filtros si los hay
+        params.Segment = segment;
+        params.TotalSegments = totalSegments;
 
+        // Construcción de los filtros si los hay
         if (filters && Object.keys(filters).length > 0) {
-            const filterKeys = Object.keys(filters);
             const filterExpressions = [];
             const expressionAttributeValues = {};
             const expressionAttributeNames = {};
 
-            filterKeys.forEach(key => {
-                // Definimos un alias para el nombre del atributo 
+            Object.keys(filters).forEach(key => {
                 const attributeAlias = `#${key}`;
-                const valueAlias = `:${key}`;
-                filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
-                    // Mapeamos el alias al nombre real
                 expressionAttributeNames[attributeAlias] = key;
-                expressionAttributeValues[valueAlias] = { S: filters[key] };
+
+                const filterValue = filters[key];
+
+                if (typeof filterValue === 'object' && filterValue !== null) {
+                    // Si se proporciona un objeto, esperamos que tenga "type" y los datos necesarios
+                    if (filterValue.type === 'between' && filterValue.start && filterValue.end) {
+                        // Filtro para un rango de fechas
+                        filterExpressions.push(`${attributeAlias} BETWEEN :${key}Start AND :${key}End`);
+                        expressionAttributeValues[`:${key}Start`] = { S: filterValue.start };
+                        expressionAttributeValues[`:${key}End`] = { S: filterValue.end };
+                    } else if (filterValue.type === 'begins_with' && filterValue.value) {
+                        // Filtro para hacer match con el prefijo de la fecha
+                        filterExpressions.push(`begins_with(${attributeAlias}, :${key}Starts)`);
+                        expressionAttributeValues[`:${key}Starts`] = { S: filterValue.value };
+                    }
+                } else {
+                    // Filtro para igualdad
+                    const valueAlias = `:${key}`;
+                    filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
+                    expressionAttributeValues[valueAlias] = { S: String(filterValue) };
+                }
             });
 
-            params.FilterExpression = filterExpressions.join(' AND ');
-            params.ExpressionAttributeNames = expressionAttributeNames;
-            params.ExpressionAttributeValues = expressionAttributeValues;
+            if (filterExpressions.length > 0) {
+                params.FilterExpression = filterExpressions.join(' AND ');
+                params.ExpressionAttributeNames = expressionAttributeNames;
+                params.ExpressionAttributeValues = expressionAttributeValues;
+            }
         }
 
+
         if (operation === "count") {
-            params.Select = "COUNT"; 
+            params.Select = "COUNT";
         }
 
         try {
@@ -78,7 +105,7 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
             const result = await dynamoDB.send(command);
 
             if (operation === "count") {
-                count += result.Count; 
+                count += result.Count;
             } else {
                 items = items.concat(result.Items || []);
             }
@@ -92,7 +119,7 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
     } while (lastEvaluatedKey);
 
     logger.info(`[Segmento ${segment}] Finalizado. Total registros: ${operation === "count" ? count : items.length}`);
-    
+
     return operation === "count" ? count : items;
 };
 
@@ -126,23 +153,40 @@ Las tablas disponibles y ejemplos de registros son:
   {"Item": {"VehicleID": "2B07", "EmissionType": "3", "VehicleType": "Bike"}}
   {"Item": {"VehicleID": "1DA5", "EmissionType": "1", "VehicleType": "Truck"}}
 
-  
-
 - Detections  
   Ejemplos:
   {"Item": {"DetectionID": "546806", "Date": "2024_09_19_14_35_38", "CameraID": "2", "Dir": "0", "VehicleID": "9E7B"}}
   {"Item": {"DetectionID": "671479", "Date": "2024_10_31_10_19_44", "CameraID": "20", "Dir": "0", "VehicleID": "C2A9"}}
 
-  Las fechas están en formato "YYYY_MM_DD_HH_MM_SS".
+Las fechas están en formato "YYYY_MM_DD_HH_MM_SS".
 
+REQUISITOS ADICIONALES:
+- Si la consulta incluye fechas parciales (por ejemplo "noviembre de 2024", "27 de noviembre de 2024" o "27 de noviembre de 2024 entre las 20 y las 21"), el filtro para la fecha debe ser representado como un objeto JSON indicando el tipo de comparación.
+- Para una consulta que haga referencia a un rango completo de fechas, usa un objeto con "type": "between" y proporciona las propiedades "start" y "end" con el valor de la fecha completo en el formato "YYYY_MM_DD_HH_MM_SS".
+- Si solo se requiere comparar con un prefijo (por ejemplo, todas las detecciones de un día), se puede usar un objeto con "type": "begins_with" y la propiedad "value" conteniendo el prefijo.
 
-  Requisito Adicional:  
-Indica si se espera una única respuesta o si se requieren múltiples partes para responder.
+Indica también si se espera una única respuesta o si se requieren múltiples partes para responder.
 
-Ejemplo de respuesta. Responde en formato JSON de la siguiente forma:
+Ejemplos de respuesta. Responde en formato JSON de la siguiente forma: 
 {
   "tables": [
     {"tableName": "Vehicles", "filters": {"EmissionType": "1"}, "operation": "count"}
+  ],
+  "multipleParts": false
+}
+{
+  "tables": [
+    {
+      "tableName": "Detections",
+      "filters": {
+        "Date": {
+          "type": "between",
+          "start": "2024_11_27_20_00_00",
+          "end": "2024_11_27_20_59_59"
+        }
+      },
+      "operation": "count"
+    }
   ],
   "multipleParts": false
 }
@@ -198,16 +242,22 @@ const createThread = async (req, res) => {
             for (const { tableName, filters, operation } of dbQueryInfo.tables) {
                 const formattedFilters = {};
                 Object.entries(filters).forEach(([key, value]) => {
-                    formattedFilters[key] = String(value);
+                    if (typeof value === 'object' && value !== null) {
+                        // Se deja el objeto intacto para que se pueda interpretar en scanSegment
+                        formattedFilters[key] = value;
+                    } else {
+                        formattedFilters[key] = String(value);
+                    }
                 });
-            
+
+
                 const result = await parallelScan(tableName, formattedFilters, 4, operation);
                 dbResults[tableName] = result; // Guardar solo el conteo si es COUNT
-            
+
                 if (!Object.keys(filters).length) {
                     warnings[tableName] = `No se aplicaron filtros en "${tableName}".`;
                 }
-            }            
+            }
         }
 
         const thread = await openai.beta.threads.create({});
@@ -236,7 +286,7 @@ const createThread = async (req, res) => {
             role: 'user',
             content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
         });
-        
+
         const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistant.id });
 
         await new Promise(resolve => {
@@ -282,7 +332,7 @@ const sendMessageToThread = async (req, res) => {
 
         const clearContextPrompt = `**Nueva Pregunta**  
                                     Por favor, olvida todo el contexto anterior y responde únicamente a esta nueva pregunta: "${prompt}"`;
-        
+
 
         const dbQueryInfo = await analyzePromptForDBQuery(prompt);
         let dbResults = {};
@@ -291,19 +341,25 @@ const sendMessageToThread = async (req, res) => {
             for (const { tableName, filters, operation } of dbQueryInfo.tables) {
                 const formattedFilters = {};
                 Object.entries(filters).forEach(([key, value]) => {
-                    formattedFilters[key] = String(value);
+                    if (typeof value === 'object' && value !== null) {
+                        // Se deja el objeto intacto para que se pueda interpretar en scanSegment
+                        formattedFilters[key] = value;
+                    } else {
+                        formattedFilters[key] = String(value);
+                    }
                 });
-            
+
+
                 const result = await parallelScan(tableName, formattedFilters, 4, operation);
                 dbResults[tableName] = result;
-            }            
+            }
         }
 
         await openai.beta.threads.messages.create(threadId, {
             role: 'user',
             content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
         });
-        
+
         const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
 
         await new Promise(resolve => {
