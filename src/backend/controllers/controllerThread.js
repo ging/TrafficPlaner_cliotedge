@@ -2,6 +2,7 @@
 const { OpenAI } = require('openai');
 require('dotenv').config({ path: './.env' });
 
+const { DateTime } = require('luxon'); 
 const logger = require('../loggerWinston');
 const { Conversation } = require('../models');
 const { dynamoDB } = require('../config/config.js');
@@ -12,9 +13,99 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+function toMillis(value) {
+    if (typeof value !== 'string') return value;
+    //ISO con hora: "YYYY-MM-DDTHH:mm:ss" 
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/.test(value)) {
+        const dt = DateTime.fromISO(value, { zone: 'Europe/Madrid' });
+        return dt.isValid ? dt.toMillis() : NaN;
+    }
+    //Es ISO?
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const dt = DateTime.fromISO(value, { zone: 'Europe/Madrid' });
+        return dt.isValid ? dt.toMillis() : NaN;
+    }
+    
+    const dtEs = DateTime.fromFormat(
+        value,
+        "d 'de' LLLL 'de' yyyy HH:mm:ss",
+        { locale: 'es', zone: 'Europe/Madrid' }
+    );
+    if (dtEs.isValid) return dtEs.toMillis();
+    
+    const dtEs2 = DateTime.fromFormat(
+        value,
+        "d 'de' LLLL 'de' yyyy",
+        { locale: 'es', zone: 'Europe/Madrid' }
+    );
+    if (dtEs2.isValid) return dtEs2.startOf('day').toMillis();
+    throw new Error(`No pude parsear la fecha "${value}"`);
+}
 
+function toHour(value) {
+    // Convierte "HH:mm" o "HH:mm:ss" en segundos desde 00:00
+    if (typeof value === 'string' && /^\d{1,2}:\d{2}(:\d{2})?$/.test(value)) {
+        const parts = value.split(':').map(Number);
+        const [h, m, s = 0] = parts;
+        return h * 3600 + m * 60 + s;
+    }
+    return value;
+}
+
+function normalizeFilters(filters) {
+    const normalized = {};
+
+    for (const [key, value] of Object.entries(filters)) {
+
+        if (key === 'hour_observed') {
+            normalized[key] = typeof value === 'string' ? toHour(value) : value;
+            continue;
+        }
+        if (
+            value &&
+            typeof value === 'object' &&
+            value.type === 'between' &&
+            value.start !== undefined &&
+            value.end !== undefined
+        ) {
+            const startMillis = typeof value.start === 'number'
+                ? value.start
+                : toMillis(value.start);
+            const endMillis = typeof value.end === 'number'
+                ? value.end
+                : toMillis(value.end);
+
+            if (startMillis === endMillis) {
+                normalized[key] = startMillis;
+            } else {
+                normalized[key] = {
+                    type: 'between',
+                    start: startMillis,
+                    end: endMillis
+                };
+            }
+            continue;
+        }
+
+        if (typeof value === 'string' || typeof value === 'number') {
+            if (!isNaN(Number(value))) {
+                normalized[key] = Number(value);
+            } else {
+                try {
+                    normalized[key] = toMillis(value);
+                } catch {
+                    normalized[key] = value;
+                }
+            }
+            continue;
+        }
+        // Otros casos (boolean, array, etc.)
+        normalized[key] = value;
+    }
+
+    return normalized;
+}
 // Función que escanea una tabla DynamoDB utilizando Parallel Scan para mejorar la velocidad.
-
 const parallelScan = async (tableName, filters = {}, segments = 4, operation = "scan") => {
     logger.info(`Iniciando consulta en la tabla "${tableName}" con operación: ${operation}`);
 
@@ -62,6 +153,45 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
             const expressionAttributeValues = {};
             const expressionAttributeNames = {};
 
+            const typeMap = {
+                day_observed: 'N',
+                date_observed_unix: 'N',
+                date_observed_local: 'N',
+                date_observed_utc: 'N',
+                date_insert_unix: 'N',
+                date_insert_utc: 'N',
+                hour_observed: 'N',
+                device_id: 'N',
+                resource_id: 'N',
+                container_id: 'N',
+                collection_point_id: 'N',
+                municipality: 'S',
+                province: 'S',
+                country: 'S',
+                postal_code: 'S',
+                address_name: 'S',
+                address_number: 'S',
+                waste_type: 'S',
+                resource_type: 'S',
+                resource_code: 'S',
+                resource_license_plate: 'S',
+                tag: 'S',
+                incidence_group_type: 'S',
+                incidence_group_code: 'N',
+                incidence_code: 'N',
+                observations: 'S',
+                uniqueid: 'S',
+                geometry: 'S',
+                resource_brand: 'S',
+                resource_model: 'S',
+                resource_classification: 'S',
+                distance: 'N',
+                speed: 'N',
+                carbon_per_km: 'N',
+                carbon_print: 'N',
+                day_of_week: 'N',
+            };
+
             Object.keys(filters).forEach(key => {
                 const attributeAlias = `#${key}`;
                 expressionAttributeNames[attributeAlias] = key;
@@ -73,18 +203,24 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
                     if (filterValue.type === 'between' && filterValue.start && filterValue.end) {
                         // Filtro para un rango de fechas
                         filterExpressions.push(`${attributeAlias} BETWEEN :${key}Start AND :${key}End`);
-                        expressionAttributeValues[`:${key}Start`] = { S: filterValue.start };
-                        expressionAttributeValues[`:${key}End`] = { S: filterValue.end };
+                        expressionAttributeValues[`:${key}Start`] = { N: String(filterValue.start) };
+                        expressionAttributeValues[`:${key}End`] = { N: String(filterValue.end) };
                     } else if (filterValue.type === 'begins_with' && filterValue.value) {
                         // Filtro para hacer match con el prefijo de la fecha
                         filterExpressions.push(`begins_with(${attributeAlias}, :${key}Starts)`);
                         expressionAttributeValues[`:${key}Starts`] = { S: filterValue.value };
                     }
                 } else {
-                    // Filtro para igualdad
+                    // Filtro para igualdad, respetando typeMap
                     const valueAlias = `:${key}`;
+                    const dynamoType = typeMap[key] || (isNaN(filterValue) ? 'S' : 'N');
+
+                    expressionAttributeValues[valueAlias] =
+                        dynamoType === 'N'
+                            ? { N: String(filterValue) }
+                            : { S: String(filterValue) };
+
                     filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
-                    expressionAttributeValues[valueAlias] = { S: String(filterValue) };
                 }
             });
 
@@ -92,6 +228,9 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
                 params.FilterExpression = filterExpressions.join(' AND ');
                 params.ExpressionAttributeNames = expressionAttributeNames;
                 params.ExpressionAttributeValues = expressionAttributeValues;
+                logger.info(`[Segmento ${segment}] Filtro: ${params.FilterExpression}`);
+                logger.info(`[Segmento ${segment}] AttrNames: ${JSON.stringify(params.ExpressionAttributeNames)}`);
+                logger.info(`[Segmento ${segment}] AttrValues: ${JSON.stringify(params.ExpressionAttributeValues)}`);
             }
         }
 
@@ -132,60 +271,173 @@ const analyzePromptForDBQuery = async (prompt) => {
     const dbPrompt = `
 Analiza la siguiente consulta del usuario y determina qué tablas de la base de datos DynamoDB deben ser consultadas y, para cada tabla, si es necesario, indica los filtros a aplicar.
 
-IMPORTANTE:  
-- Si la consulta del usuario implica un **conteo** (por ejemplo: "¿Cuántos vehículos hay?", "Dame el total de detecciones"), entonces agrega el campo "operation": "count".
-- Si es una consulta normal, usa "operation": "scan".
+IMPORTANTE:
+- Para una consulta normal se usa "operation": "scan".
 
-Las tablas disponibles y ejemplos de registros son:
+**MUY IMPORTANTE** sobre las fechas:
+- Cuando devuelvas filtros para un día concreto, usa "start": "YYYY-MM-DD" y "end": "YYYY-MM-DD"S.
+- No pongas timestamps, solo el ISO string.
+- El backend se encargará de convertirlos a milisegundos correctamente.
+- Cuándo te pregunten por una fecha, te están preguntando por el huso horario de Madrid. Es decir, la zona horaria de Europa Central. De esta forma por ejemplo, el martes 1 de octubre de 2024 en mi zona horaria es 1727733600000.
+- El campo "day_observed" está definido como número (N) en DynamoDB. 
+- Por lo tanto, **NO** uses "begins_with" con "day_observed".  
+- Los ids de las cámaras empiezan con "CT". Por ejemplo el id de la cámara 12 es "CT12".
+  Ejemplo:  
+  "day_observed": {
+    "type": "between",
+    "start": <timestampInicioDelDia>,
+    "end": <timestampFinDelDia>
+  }
+- Si el usuario pide un rango de fechas, haz un "type": "between" con "start" y "end".
+- Si la pregunta menciona cualquier otro atributo de tf_waste_weights (por ejemplo municipality, waste_type, address_name, hour_observed, device_id, postal_code, etc.), devuelve un filtro de igualdad (o rango si aplica) sobre ese campo.  
 
-- Cameras  
-  Ejemplos:
-{"Item":{"CameraID":{"S":"22"},"Type":{"S":"Middle"}}}
-{"Item":{"CameraID":{"S":"18"},"Type":{"S":"Entry"}}}
-{"Item":{"CameraID":{"S":"13"},"Type":{"S":"Both"}}}
-{"Item":{"CameraID":{"S":"8"},"Type":{"S":"Exit"}}}
+TABLAS DISPONIBLES Y EJEMPLOS DE REGISTROS:
 
-- Vehicles  
-  Ejemplos:
-  {"Item": {"VehicleID": "D68B", "EmissionType": "1", "VehicleType": "Car"}}
-  {"Item": {"VehicleID": "98A6", "EmissionType": "4", "VehicleType": "Motorbike"}}
-  {"Item": {"VehicleID": "88F8", "EmissionType": "4", "VehicleType": "Truck"}}
-  {"Item": {"VehicleID": "2B07", "EmissionType": "3", "VehicleType": "Bike"}}
-  {"Item": {"VehicleID": "1DA5", "EmissionType": "1", "VehicleType": "Truck"}}
+1. Tabla: **rt_car_access_by_device**  
+Esta tabla contiene información sobre distintas cámaras y las detecciones que se han realizado en ellas según una fecha. Además, se puede consultar el tipo de vehículo y la etiqueta ambiental. Además, está también información sobre la localización de la cámara.
+Ejemplo:
+{
+        "environmental_label": "{\"B\": 358, \"C\": 395, \"ECO\": 58, \"No label\": 148, \"0 Emissions\": 8, \"No identified\": 67}",
+        "count_vehicles": 1034,
+        "day_observed": 1739055600000,
+        "camera_id": "CT10",
+        "vehicle_type": "{\"Car\": 980, \"Van\": 34, \"Truck\": 9, \"Motorbike\": 2, \"No identified\": 9}",
+        "location": "{\"latitude\": 40.618472, \"longitude\": -3.724701}"
+}
+        Este ejemplo corresponde a la cámara CT10 el día sábado 8 de febrero de 2025 a las 23:00:00. UTC
 
-- Detections  
-  Ejemplos:
-  {"Item": {"DetectionID": "546806", "Date": "2024_09_19_14_35_38", "CameraID": "2", "Dir": "0", "VehicleID": "9E7B"}}
-  {"Item": {"DetectionID": "671479", "Date": "2024_10_31_10_19_44", "CameraID": "20", "Dir": "0", "VehicleID": "C2A9"}}
+2. Tabla: **rt_car_access**  
+Esta tabla contiene la información diaria de todas las cámaras. Contiene la información diaria de vehículos y etiqutas ambientales.
+Ejemplo:
+{
+        "environmental_label": "{\"B\": 5153, \"C\": 6417, \"ECO\": 808, \"No label\": 2594, \"0 Emissions\": 179, \"No identified\": 901}",
+        "count_vehicles": 16052,
+        "day_observed": 1739228400000,
+        "vehicle_type": "{\"Bus\": 261, \"Car\": 13403, \"Van\": 1562, \"Truck\": 488, \"Motorbike\": 106, \"No identified\": 232}"
+}
 
-Las fechas están en formato "YYYY_MM_DD_HH_MM_SS".
+3. Tabla: **tf_waste_weights**  
+Esta tabla contiene información sobre residuos indicando el municipio, provincia y país. Contiene además la hora y fecha observada y el id del dispositivo con el que se registró el residuo. Además contiene información sobre el vehículo y los residuos. En el siguiente ejemplo tienes todas las columnas de la tabla.
+Ejemplo:
+{
+        "country": "España",
+        "day_of_week_cat": "Divendres",
+        "year_observed": 2025,
+        "incidence_group_code": 201,
+        "municipality": "Tres Cantos",
+        "incidence_code": 0,
+        "date_observed_local": 1743746387000,
+        "neighbourhood_code": "\"\"",
+        "month_observed": 4,
+        "container_code": "Sin identificar",
+        "province": "Madrid",
+        "neighbourhood": "\"\"",
+        "collection_point_observations": "\"\"",
+        "tag": "Sin identificar",
+        "month_cat": "Abril",
+        "day_of_week_es": "Viernes",
+        "longitude": -3.7148245,
+        "area": "\"\"",
+        "device_id": 5,
+        "resource_code": "7845MDV",
+        "resource_type": "Grúa",
+        "date_insert_unix": 1743929939,
+        "container_observations": "\"\"",
+        "collection_point_reference": null,
+        "month_es": "Abril",
+        "collection_point_creation_date_utc_unix": 1738582210,
+        "operating_time": 0,
+        "date_observed_utc": 1743739187000,
+        "container_type": "Sin identificar",
+        "resource_description": "\"\"",
+        "container_id": 0,
+        "altitude": 729,
+        "incidence_group_type": "Recogida pesaje / RFID",
+        "latitude": 40.603788333333334,
+        "date_observed_unix": 1743739187,
+        "address_name": "Avenida de los Encuartes",
+        "collection_point_creation_date_utc": 1738582210000,
+        "observations": "No asociada.",
+        "resource_license_plate": "7845MDV (VOLVO FE PALVI GRÚA ATLAS)",
+        "is_payt": false,
+        "incidence_type": "\"\"",
+        "uniqueid": "2025-04-04 05:59:47Papel6",
+        "date_insert_utc": 1743929939406,
+        "collection_point_id": 61,
+        "day_observed": 1743717600000,
+        "hour_observed": 7,
+        "waste_type": "Papel",
+        "lifts": 0,
+        "waste_weight": 0.0,
+        "address_number": "19",
+        "service_type": null,
+        "resource_id": 6,
+        "postal_code": "28760"
+    }
+
+4. Tabla: **tf_waste_carbon_print**  
+
+En esta tabla se registran rutas junto con su impacto de carbono. En "resource_code" aparece la matrícula, en "resource_license_plate" la matrícula junto con el modelo.
+Ejemplo:
+{
+        "resource_brand": "VOLVO",
+        "day_observed": 1741561200000,
+        "device_id": 3,
+        "distance": 91.018,
+        "resource_code": "3813MHL",
+        "carbon_per_km": 0.176,
+        "resource_type": "Grúa",
+        "resource_model": "FE PALVI GRÚA ATLAS",
+        "speed": 19.85636856368564,
+        "resource_classification": "B100",
+        "carbon_print": 16.019167913198473,
+        "resource_id": 3,
+        "resource_license_plate": "3813MHL (VOLVO FE PALVI GRÚA ATLAS)",
+        "geometry": "LINESTRING (-3.695780666666667 40.61433216666667, ... , -3.6954691666666672 40.61411283333334, -3.695340166666667 40.61409883333333, -3.6954321666666665 40.614107833333335, -3.6955990000000005 40.6141875, -3.6958701666666665 40.6143115, -3.6959204999999997 40.614334666666664, -3.696007666666667 40.61433916666667, -3.6960531666666667 40.61430983333333, -3.696061666666666 40.614303)",
+        "uniqueid": "2025-03-1033",
+        "day_of_week": 0
+    }
+
+5. Tabla: **tf_waste_observed_routes**  
+En esta tabla se registran las rutas de los residuos.  En "resource_code" aparece la matrícula, en "resource_license_plate" la matrícula junto con el modelo.
+Ejemplo:
+{
+        "resource_brand": "VOLVO",
+        "day_observed": 1743717600000,
+        "device_id": 2,
+        "distance": 23.579,
+        "resource_code": "1219MGR",
+        "resource_type": "Grúa",
+        "resource_model": "FE GRÚA ATLAS",
+        "speed": 9.287081339712918,
+        "resource_id": 2,
+        "resource_license_plate": "1219MGR (VOLVO FE GRÚA ATLAS)",
+        "geometry": "LINESTRING (-3.703763833333333 40.614719, -3.696055666666667 40.61405166666667, -3.696067 40.614064666666664, -3.69621 40.614109500000005, -3.6962105 40.614059833333336, -3.696227833333333 40.61404266666667, -3.6962610000000002 40.61397683333333, -3.6962325000000003 40.61392583333333, -3.6943144999999995 40.61210966666667, ...,-3.6942755 40.6121825, -3.6943743333333336 40.6122325, -3.6962358333333336 40.61405383333333, -3.6961510000000004 40.614129166666665, -3.6960956666666664 40.61417433333334, -3.6960933333333337 40.6141945, -3.696083166666667 40.61424866666667, -3.696093666666667 40.614223833333334)",
+        "uniqueid": "2025-04-0422",
+        "day_of_week": 4
+    }
 
 REQUISITOS ADICIONALES:
-- Si la consulta incluye fechas parciales (por ejemplo "noviembre de 2024", "27 de noviembre de 2024" o "27 de noviembre de 2024 entre las 20 y las 21"), el filtro para la fecha debe ser representado como un objeto JSON indicando el tipo de comparación.
-- Para una consulta que haga referencia a un rango completo de fechas, usa un objeto con "type": "between" y proporciona las propiedades "start" y "end" con el valor de la fecha completo en el formato "YYYY_MM_DD_HH_MM_SS".
-- Si solo se requiere comparar con un prefijo (por ejemplo, todas las detecciones de un día), se puede usar un objeto con "type": "begins_with" y la propiedad "value" conteniendo el prefijo.
+- Si te preguntan por rutas y no aparece nada en la tabla tf_waste_observed_routes, es posible que la información esté en tf_waste_carbon_print. Por lo que puede que tengas que mirar las dos tablas.
+- Las fechas se guardan en formato Unix (algunos en milisegundos y otros en segundos).
+- Si la consulta incluye fechas parciales (por ejemplo: "abril 2025", "el 5 de abril de 2025" o "entre las 10 y las 11 de un día"), el filtro para la fecha se representará mediante un objeto JSON que indique el tipo de comparación ("between").
+- Para una consulta que haga referencia a un rango completo de fechas se usará un objeto con "type": "between" y se proporcionarán las propiedades "start" y "end" en formato Unix (por ejemplo: 1743717600000).
+- Indica también si se espera una única respuesta o si se requieren múltiples partes para responder.
 
-Indica también si se espera una única respuesta o si se requieren múltiples partes para responder.
-
-Ejemplos de respuesta. Responde en formato JSON de la siguiente forma: 
-{
-  "tables": [
-    {"tableName": "Vehicles", "filters": {"EmissionType": "1"}, "operation": "count"}
-  ],
-  "multipleParts": false
-}
+Ejemplo de respuesta en formato JSON:
 {
   "tables": [
     {
-      "tableName": "Detections",
+      "tableName": "rt_car_access_by_device",
       "filters": {
-        "Date": {
-          "type": "between",
-          "start": "2024_11_27_20_00_00",
-          "end": "2024_11_27_20_59_59"
-        }
+         "environmental_label": "{\"B\": ...}",
+         "day_observed": {
+           "type": "between",
+           "start": 1743717600000,
+           "end": 1743803999999
+         }
       },
-      "operation": "count"
+      "operation": "scan"
     }
   ],
   "multipleParts": false
@@ -195,9 +447,10 @@ Si para alguna tabla no es necesario aplicar filtros, el objeto filters debe est
 
 Consulta: "${prompt}"
 `;
+
     try {
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4.1-mini',
             messages: [
                 { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
                 { role: 'user', content: dbPrompt }
@@ -250,8 +503,8 @@ const createThread = async (req, res) => {
                     }
                 });
 
-
-                const result = await parallelScan(tableName, formattedFilters, 4, operation);
+                const finalFilters = normalizeFilters(formattedFilters);
+                const result = await parallelScan(tableName, finalFilters, 4, operation);
                 dbResults[tableName] = result; // Guardar solo el conteo si es COUNT
 
                 if (!Object.keys(filters).length) {
@@ -279,13 +532,22 @@ const createThread = async (req, res) => {
                 **Instrucción de la base de datos:**
                 Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
-            model: 'gpt-4o'
+            model: 'gpt-4.1-mini',
         });
 
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
-            content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
+            content: `
+            ${prompt}
+            
+            Interpretación de la consulta:
+            ${JSON.stringify(dbQueryInfo, null, 2)}
+            
+            Resultados de la base de datos:
+            ${JSON.stringify(dbResults, null, 2)}
+            `
         });
+
 
         const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistant.id });
 
@@ -350,14 +612,23 @@ const sendMessageToThread = async (req, res) => {
                 });
 
 
-                const result = await parallelScan(tableName, formattedFilters, 4, operation);
+                const finalFilters = normalizeFilters(formattedFilters);
+                const result = await parallelScan(tableName, finalFilters, 4, operation);
                 dbResults[tableName] = result;
             }
         }
 
         await openai.beta.threads.messages.create(threadId, {
             role: 'user',
-            content: `${prompt}\n\nDatos de la consulta: ${JSON.stringify(dbResults)}`
+            content: `
+            ${prompt}
+            
+            Interpretación de la consulta:
+            ${JSON.stringify(dbQueryInfo, null, 2)}
+            
+            Resultados de la base de datos:
+            ${JSON.stringify(dbResults, null, 2)}
+            `
         });
 
         const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
