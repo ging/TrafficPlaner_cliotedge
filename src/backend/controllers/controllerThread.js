@@ -2,7 +2,7 @@
 const { OpenAI } = require('openai');
 require('dotenv').config({ path: './.env' });
 
-const { DateTime } = require('luxon'); 
+const { DateTime } = require('luxon');
 const logger = require('../loggerWinston');
 const { Conversation } = require('../models');
 const { dynamoDB } = require('../config/config.js');
@@ -25,14 +25,14 @@ function toMillis(value) {
         const dt = DateTime.fromISO(value, { zone: 'Europe/Madrid' });
         return dt.isValid ? dt.toMillis() : NaN;
     }
-    
+
     const dtEs = DateTime.fromFormat(
         value,
         "d 'de' LLLL 'de' yyyy HH:mm:ss",
         { locale: 'es', zone: 'Europe/Madrid' }
     );
     if (dtEs.isValid) return dtEs.toMillis();
-    
+
     const dtEs2 = DateTime.fromFormat(
         value,
         "d 'de' LLLL 'de' yyyy",
@@ -192,38 +192,35 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
                 day_of_week: 'N',
             };
 
-            Object.keys(filters).forEach(key => {
-                const attributeAlias = `#${key}`;
-                expressionAttributeNames[attributeAlias] = key;
-
-                const filterValue = filters[key];
-
-                if (typeof filterValue === 'object' && filterValue !== null) {
-                    // Si se proporciona un objeto, esperamos que tenga "type" y los datos necesarios
-                    if (filterValue.type === 'between' && filterValue.start && filterValue.end) {
-                        // Filtro para un rango de fechas
-                        filterExpressions.push(`${attributeAlias} BETWEEN :${key}Start AND :${key}End`);
-                        expressionAttributeValues[`:${key}Start`] = { N: String(filterValue.start) };
-                        expressionAttributeValues[`:${key}End`] = { N: String(filterValue.end) };
-                    } else if (filterValue.type === 'begins_with' && filterValue.value) {
-                        // Filtro para hacer match con el prefijo de la fecha
-                        filterExpressions.push(`begins_with(${attributeAlias}, :${key}Starts)`);
-                        expressionAttributeValues[`:${key}Starts`] = { S: filterValue.value };
-                    }
-                } else {
-                    // Filtro para igualdad, respetando typeMap
-                    const valueAlias = `:${key}`;
-                    const dynamoType = typeMap[key] || (isNaN(filterValue) ? 'S' : 'N');
-
-                    expressionAttributeValues[valueAlias] =
-                        dynamoType === 'N'
-                            ? { N: String(filterValue) }
-                            : { S: String(filterValue) };
-
-                    filterExpressions.push(`${attributeAlias} = ${valueAlias}`);
+            Object.entries(filters).forEach(([key, filterValue]) => {
+                const attr = `#${key}`;
+                const valAlias = `:${key}`;
+              
+                // Rango "between"
+                if (typeof filterValue === 'object' && filterValue?.type === 'between' && filterValue.start != null && filterValue.end != null) {
+                  expressionAttributeNames[attr] = key;
+                  filterExpressions.push(`${attr} BETWEEN ${valAlias}Start AND ${valAlias}End`);
+                  expressionAttributeValues[`${valAlias}Start`] = { N: String(filterValue.start) };
+                  expressionAttributeValues[`${valAlias}End`]   = { N: String(filterValue.end) };
                 }
-            });
-
+                // Prefijo "begins_with"
+                else if (typeof filterValue === 'object' && filterValue?.type === 'begins_with' && filterValue.value) {
+                  expressionAttributeNames[attr] = key;
+                  filterExpressions.push(`begins_with(${attr}, ${valAlias}Starts)`);
+                  expressionAttributeValues[`${valAlias}Starts`] = { S: filterValue.value };
+                }
+                // Igualdad simple
+                else if (filterValue !== undefined && filterValue !== null) {
+                  const dynamoType = typeMap[key] || (isNaN(filterValue) ? 'S' : 'N');
+                  expressionAttributeNames[attr] = key;
+                  filterExpressions.push(`${attr} = ${valAlias}`);
+                  expressionAttributeValues[valAlias] =
+                    dynamoType === 'N'
+                      ? { N: String(filterValue) }
+                      : { S: String(filterValue) };
+                }
+              });
+              
             if (filterExpressions.length > 0) {
                 params.FilterExpression = filterExpressions.join(' AND ');
                 params.ExpressionAttributeNames = expressionAttributeNames;
@@ -273,6 +270,8 @@ Analiza la siguiente consulta del usuario y determina qué tablas de la base de 
 
 IMPORTANTE:
 - Para una consulta normal se usa "operation": "scan".
+- Si la pregunta es del tipo "¿Cuántas furgonetas…?" o pide un subtipo de vehículo (camiones, motos, etc.) en las tablas **rt_car_access_by_device** o **rt_car_access**, **no** incluyas ningún filtro sobre vehicle_type. Sólo filtra por el resto de campos; el asistente se encargará de leer el JSON de vehicle_type y extraer el número correcto.
+- Recuerda que si te pregunta por las detecciones de un día en concreto sin especificar la cámara, se trata de la tabla rt_car_access.
 
 **MUY IMPORTANTE** sobre las fechas:
 - Cuando devuelvas filtros para un día concreto, usa "start": "YYYY-MM-DD" y "end": "YYYY-MM-DD"S.
@@ -281,7 +280,7 @@ IMPORTANTE:
 - Cuándo te pregunten por una fecha, te están preguntando por el huso horario de Madrid. Es decir, la zona horaria de Europa Central. De esta forma por ejemplo, el martes 1 de octubre de 2024 en mi zona horaria es 1727733600000.
 - El campo "day_observed" está definido como número (N) en DynamoDB. 
 - Por lo tanto, **NO** uses "begins_with" con "day_observed".  
-- Los ids de las cámaras empiezan con "CT". Por ejemplo el id de la cámara 12 es "CT12".
+- Los ids de las cámaras empiezan con "CT". Por ejemplo el id de la cámara 12 es "CT12". Siempre es CT y dos dígitos. Por ejemplo: CT04.
   Ejemplo:  
   "day_observed": {
     "type": "between",

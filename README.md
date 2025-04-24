@@ -10,7 +10,9 @@
 cd src
 node app.js -->
 ```
+cd src
 npm install
+cd ..
 docker compose up --build
 ```
 
@@ -29,3 +31,8 @@ Upload the data
 node seeders/loadData.js
 ```	
 
+## To run the test benchmark
+Execute from src/pruebas
+```
+node benchmark.js
+```
