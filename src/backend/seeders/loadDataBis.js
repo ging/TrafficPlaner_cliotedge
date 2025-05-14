@@ -32,7 +32,6 @@ if (!region || !accessKeyId || !secretAccessKey) {
 // Cliente DynamoDB
 const dynamo = new DynamoDBClient({ region, endpoint, credentials: { accessKeyId, secretAccessKey } });
 
-// Obtiene el esquema de claves primarias de la tabla
 async function getKeyFields(tableName) {
   const desc = await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
   if (!desc.Table || !desc.Table.KeySchema) {
@@ -41,10 +40,8 @@ async function getKeyFields(tableName) {
   return desc.Table.KeySchema.map(k => k.AttributeName);
 }
 
-// Lee JSON desde disco
 const readJson = filePath => JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-// Borra todos los ítems de la tabla usando sus claves primarias
 async function clearTable(tableName, keyFields) {
   let lastKey;
   do {
@@ -75,7 +72,6 @@ async function insertAll(tableName, data) {
   }
 }
 
-// Flujo principal
 async function main() {
   try {
     const dataDir = path.join(__dirname, '../datos/data');
