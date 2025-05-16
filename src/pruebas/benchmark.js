@@ -24,6 +24,27 @@ const axios = require('axios');
         // Definición de tests
         const tests = [
             {
+                prompt: '¿Cuál fue la huella de carbono del vehículo 9799MDY el 22 de diciembre de 2024?',
+                expected: ['10.696575942039491', '10.696', '10.7', '10.697']
+            },
+            {
+                prompt: '¿Qué distancia recorrió el vehículo de matrícula 8502MCR el 7 de febrero de 2025?',
+                expected: ['64.336', '64.34']
+            },
+            {
+                prompt: '¿Qué distancia recorrió el vehículo 1219MGR el día 30 de abril de 2025?',
+                expected: ['65.018', '65.0']
+            },
+            {
+                prompt: '¿A qué velocidad fue el vehículo 7456GWH el día 4 de febrero de 2025?',
+                expected: ['11.570713391739675', '11.57', '11.6']
+            },
+            {
+                prompt: '¿Cuál fue la huella de carbono del vehículo 9801MDY el 26 de enero de 2025?',
+                expected: ['10.875039941072464', '10.875', '10.8']
+
+            },
+            {
                 prompt: '¿Cuántos vehículos registró la cámara 2 el 4 de febrero de 2025?',
                 expected: ['2285', '2,285']
             },
@@ -62,6 +83,86 @@ const axios = require('axios');
             {
                 prompt: '¿Qué distancia recorrió el vehículo de matrícula 7845MDV el día 7 de marzo de 2025?',
                 expected: ['78.424']
+            },
+            {
+                prompt: '¿Cuántos vehículos con etiqueta ECO se registraron el 7 de febrero de 2025?',
+                expected: ['2912', '2,912']
+            },
+            {
+                prompt: '¿Cuántos camiones se registraron el 7 de febrero de 2025?',
+                expected: ['896']
+            },
+            {
+                prompt: '¿Cuántos vehículos registró la cámara 3 el 8 de febrero de 2025?',
+                expected: ['4295', '4,295']
+            },
+            {
+                prompt: '¿Cuántos vehículos con etiqueta ECO detectó la cámara 3 el 8 de febrero de 2025?',
+                expected: ['186']
+            },
+            {
+                prompt: '¿Cuántas furgonetas detectó la cámara 3 el 8 de febrero de 2025?',
+                expected: ['168']
+            },
+            {
+                prompt: '¿Qué distancia recorrió el vehículo de matrícula 1219MGR el 4 de abril de 2025?',
+                expected: ['23.579']
+            },
+            {
+                prompt: '¿Cuál fue la velocidad media del vehículo de matrícula 1219MGR el 4 de abril de 2025?',
+                expected: ['9.287081339712918', '9.29', '9.287']
+            },
+            {
+                prompt: '¿Qué distancia recorrió el dispositivo 6 el 8 de marzo de 2025?',
+                expected: ['4.695']
+            },
+            {
+                prompt: '¿Cuál fue la velocidad media del dispositivo 6 el 8 de marzo de 2025?',
+                expected: ['13.038167938931299', '13.04', '13.038']
+            },
+            {
+                prompt: '¿Cuál fue la clasificación de combustible del dispositivo 3 el 10 de marzo de 2025?',
+                expected: ['B100']
+            },
+            {
+                prompt: '¿Cuál fue el peso de residuos del tipo Envases recogido el 4 de abril de 2025 en el punto de recolección 3?',
+                expected: ['0.0', '0']
+            },
+            {
+                prompt: '¿Cuántos vehículos con etiqueta C detectó la cámara CT12 el 7 de febrero de 2025?',
+                expected: ['817']
+            },
+            {
+                prompt: '¿Cuál fue el número de vehículos sin etiqueta detectados por la cámara CT13 el 7 de febrero de 2025?',
+                expected: ['1018', '1,018']
+            },
+            {
+                prompt: '¿Cuántos camiones registró la cámara CT13 el 7 de febrero de 2025?',
+                expected: ['75']
+            },
+            {
+                prompt: '¿Cuántos coches registró la cámara CT11 el 7 de febrero de 2025?',
+                expected: ['508']
+            },
+            {
+                prompt: '¿A qué hora se observó el residuo tipo Papel en el punto de recolección 143 por el recurso 7845MDV el 4 de abril de 2025?',
+                expected: ['9']
+            },
+            {
+                prompt: '¿Cuántos vehículos con etiqueta 0 Emissions se registraron el 7 de febrero de 2025?',
+                expected: ['679']
+            },
+            {
+                prompt: '¿Cuántos camiones detectó la cámara CT11 el 7 de febrero de 2025?',
+                expected: ['7']
+            },
+            {
+                prompt: '¿Cuál fue el carbono por kilómetro del dispositivo 6 el 9 de marzo de 2025?',
+                expected: ['0.176']
+            },
+            {
+                prompt: '¿A qué hora se observó el residuo tipo Papel en el punto de recolección 67 por el recurso 7845MDV el 4 de abril de 2025?',
+                expected: ['8']
             }
         ];
 
@@ -74,11 +175,13 @@ const axios = require('axios');
         const total = tests.length;
         let threadId, assistantId;
 
+        const startAll = Date.now();
         console.log(`Ejecutando el benchmark (${total} tests)…\n`);
 
         // Loop de tests
         for (let i = 0; i < total; i++) {
             const { prompt, expected } = tests[i];
+            const testStart = Date.now();
             process.stdout.write(`Test ${i + 1}/${total}… `);
 
             try {
@@ -104,8 +207,9 @@ const axios = require('axios');
                     answer = res.data.response?.text?.value?.trim() || '';
                 }
 
+                const duration = Date.now() - testStart;
                 const ok = expected.some(exp => answer.includes(exp));
-                console.log(ok ? '✅' : '❌');
+                console.log(ok ? '✅' : '❌', `(tiempo: ${duration} ms)`);
 
                 console.log(`  Prompt   : ${prompt}`);
                 console.log(`  Esperado : [${expected.join(', ')}]`);
@@ -113,13 +217,16 @@ const axios = require('axios');
                 if (ok) passed++;
 
             } catch (err) {
-                console.log('⚠️ Error');
+                const duration = Date.now() - testStart;
+                console.log('⚠️ Error', `(tiempo: ${duration} ms)`);
                 console.log(`  Prompt   : ${prompt}`);
                 console.log(`  Error    : ${err.message}\n`);
             }
         }
 
+        const totalDuration = Date.now() - startAll;
         console.log(`📊 Resultado final: ${passed} de ${total} tests pasados`);
+        console.log(`⏱️ Tiempo total del benchmark: ${totalDuration} ms`);
 
     } catch (err) {
         console.error('🚨 Falló el benchmark:', err.message);

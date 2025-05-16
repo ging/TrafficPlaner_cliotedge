@@ -450,6 +450,7 @@ Consulta: "${prompt}"
     try {
         const response = await openai.chat.completions.create({
             model: 'gpt-4.1-mini',
+            temperature: 0,
             messages: [
                 { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
                 { role: 'user', content: dbPrompt }
@@ -532,6 +533,7 @@ const createThread = async (req, res) => {
                 Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
             model: 'gpt-4.1-mini',
+            temperature: 0
         });
 
         await openai.beta.threads.messages.create(thread.id, {
