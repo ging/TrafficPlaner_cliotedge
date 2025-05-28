@@ -45,6 +45,7 @@ And add in src/backend/datos/data:
 Upload the data
 ```	
 node seeders/loadData.js
+node seeders/loadDataBis.js
 ```	
 
 ## To run the test benchmark
