@@ -17,7 +17,7 @@ services:
     env_file:
       - ./src/backend/.env  
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - cliotedge-postgres_data:/var/lib/postgresql/data
 

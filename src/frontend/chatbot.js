@@ -68,6 +68,8 @@ const sendMessage = async (message) => {
         [threadId, assistantId] = await createThreadAssistant();
     }
 
+    console.log(`Enviando mensaje al thread ${threadId} con assistantId ${assistantId}:`, message);
+
     try {
         const response = await fetch(`${window.API_URL}${window.API_CONTEXT}/threads/message`, {
             method: 'POST',

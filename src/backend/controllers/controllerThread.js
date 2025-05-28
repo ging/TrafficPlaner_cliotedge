@@ -536,16 +536,21 @@ const createThread = async (req, res) => {
             temperature: 0
         });
 
-        await openai.beta.threads.messages.create(thread.id, {
-            role: 'user',
-            content: `
-            ${prompt}
+        contentMessage = `
+        ${prompt}
             
             Interpretación de la consulta:
             ${JSON.stringify(dbQueryInfo, null, 2)}
             
             Resultados de la base de datos:
-            ${JSON.stringify(dbResults, null, 2)}
+            ${JSON.stringify(dbResults, null, 2)}`
+
+        logger.info(`Creando message de thread con ID: ${thread.id} y mensaje: "${contentMessage}, "`);
+
+        await openai.beta.threads.messages.create(thread.id, {
+            role: 'user',
+            content: `
+            ${contentMessage}
             `
         });
 
@@ -567,6 +572,8 @@ const createThread = async (req, res) => {
 
         // Guardar la conversación en la base de datos como activa
         await createConversation(thread.id);
+
+        logger.info(dbResults)
 
         // Responder incluyendo además los posibles avisos y la interpretación de la consulta
         res.send({
