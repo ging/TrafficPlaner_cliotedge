@@ -9,6 +9,11 @@ services:
       - martell
     restart: unless-stopped
 
+  dynamodb-local:
+    networks:
+      - martell
+    restart: unless-stopped
+
 volumes:
   cliotedge-postgres_data:
 
