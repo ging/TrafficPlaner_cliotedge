@@ -230,6 +230,22 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
                 logger.info(`[Segmento ${segment}] AttrNames: ${JSON.stringify(params.ExpressionAttributeNames)}`);
                 logger.info(`[Segmento ${segment}] AttrValues: ${JSON.stringify(params.ExpressionAttributeValues)}`);
             }
+
+                    if (operation !== "count") {
+                      params.ProjectionExpression = Object.keys(typeMap)
+                        .filter((attr) => attr !== "geometry")
+                        .map((attr) => `#${attr}`)
+                        .join(", ");
+                      params.ExpressionAttributeNames = {
+                        ...(params.ExpressionAttributeNames || {}),
+                        ...Object.fromEntries(
+                          Object.keys(typeMap)
+                            .filter((attr) => attr !== "geometry")
+                            .map((attr) => [`#${attr}`, attr])
+                        ),
+                      };
+                    }
+
         }
 
 
