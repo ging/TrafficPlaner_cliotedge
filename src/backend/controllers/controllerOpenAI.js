@@ -17,7 +17,7 @@ const getOpenAIResponse = async (req, res) => {
     try {
         // Llamada a la API de OpenAI
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4o-mini',
             messages: [{ role: 'user', content: prompt }],
         });
 

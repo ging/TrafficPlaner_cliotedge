@@ -127,6 +127,7 @@ const parallelScan = async (tableName, filters = {}, segments = 4, operation = "
         const items = results.flat();
 
         logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
+        logger.info(items);
         return items;
     }
 
@@ -449,7 +450,7 @@ Consulta: "${prompt}"
 
     try {
         const response = await openai.chat.completions.create({
-            model: 'gpt-4.1-mini',
+            model: 'gpt-4o-mini',
             temperature: 0,
             messages: [
                 { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
@@ -532,11 +533,11 @@ const createThread = async (req, res) => {
                 **Instrucción de la base de datos:**
                 Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
-            model: 'gpt-4.1-mini',
+            model: 'gpt-4o-mini',
             temperature: 0
         });
 
-        contentMessage = `
+        messageContent = `
         ${prompt}
             
             Interpretación de la consulta:
@@ -545,12 +546,12 @@ const createThread = async (req, res) => {
             Resultados de la base de datos:
             ${JSON.stringify(dbResults, null, 2)}`
 
-        logger.info(`Creando message de thread con ID: ${thread.id} y mensaje: "${contentMessage}, "`);
+        logger.info(`Creando message de thread con id: ${thread.id} y mensaje: "${messageContent}, "`);
 
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
             content: `
-            ${contentMessage}
+            ${messageContent}
             `
         });
 
@@ -572,8 +573,6 @@ const createThread = async (req, res) => {
 
         // Guardar la conversación en la base de datos como activa
         await createConversation(thread.id);
-
-        logger.info(dbResults)
 
         // Responder incluyendo además los posibles avisos y la interpretación de la consulta
         res.send({
@@ -626,16 +625,19 @@ const sendMessageToThread = async (req, res) => {
             }
         }
 
-        await openai.beta.threads.messages.create(threadId, {
-            role: 'user',
-            content: `
-            ${prompt}
-            
+        const messageContent = `${prompt}
             Interpretación de la consulta:
             ${JSON.stringify(dbQueryInfo, null, 2)}
             
             Resultados de la base de datos:
-            ${JSON.stringify(dbResults, null, 2)}
+            ${JSON.stringify(dbResults, null, 2)}`
+
+        logger.info(`Enviando mensaje al thread con ID: ${threadId} y mensaje: "${messageContent}"`);
+
+        await openai.beta.threads.messages.create(threadId, {
+            role: 'user',
+            content: `
+            ${messageContent}
             `
         });
 
