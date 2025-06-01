@@ -7,11 +7,21 @@ const logger = require('../loggerWinston');
 const { Conversation } = require('../models');
 const { dynamoDB } = require('../config/config.js');
 const { ScanCommand } = require('@aws-sdk/client-dynamodb');
+const { log } = require('winston');
 
 // Inicializar la API de OpenAI
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Función para eliminar el campo geometry
+function stripGeometry(items) {
+    if (!Array.isArray(items)) return items;
+    return items.map(item => {
+        const { geometry, ...rest } = item;
+        return rest;
+    });
+}
 
 function toMillis(value) {
     if (typeof value !== 'string') return value;
@@ -127,7 +137,6 @@ const parallelScan = async (tableName, filters = {}, segments = 4, operation = "
         const items = results.flat();
 
         logger.info(`ParallelScan completado: Se recuperaron ${items.length} registros de la tabla "${tableName}".`);
-        logger.info(items);
         return items;
     }
 
@@ -196,32 +205,32 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
             Object.entries(filters).forEach(([key, filterValue]) => {
                 const attr = `#${key}`;
                 const valAlias = `:${key}`;
-              
+
                 // Rango "between"
                 if (typeof filterValue === 'object' && filterValue?.type === 'between' && filterValue.start != null && filterValue.end != null) {
-                  expressionAttributeNames[attr] = key;
-                  filterExpressions.push(`${attr} BETWEEN ${valAlias}Start AND ${valAlias}End`);
-                  expressionAttributeValues[`${valAlias}Start`] = { N: String(filterValue.start) };
-                  expressionAttributeValues[`${valAlias}End`]   = { N: String(filterValue.end) };
+                    expressionAttributeNames[attr] = key;
+                    filterExpressions.push(`${attr} BETWEEN ${valAlias}Start AND ${valAlias}End`);
+                    expressionAttributeValues[`${valAlias}Start`] = { N: String(filterValue.start) };
+                    expressionAttributeValues[`${valAlias}End`] = { N: String(filterValue.end) };
                 }
                 // Prefijo "begins_with"
                 else if (typeof filterValue === 'object' && filterValue?.type === 'begins_with' && filterValue.value) {
-                  expressionAttributeNames[attr] = key;
-                  filterExpressions.push(`begins_with(${attr}, ${valAlias}Starts)`);
-                  expressionAttributeValues[`${valAlias}Starts`] = { S: filterValue.value };
+                    expressionAttributeNames[attr] = key;
+                    filterExpressions.push(`begins_with(${attr}, ${valAlias}Starts)`);
+                    expressionAttributeValues[`${valAlias}Starts`] = { S: filterValue.value };
                 }
                 // Igualdad simple
                 else if (filterValue !== undefined && filterValue !== null) {
-                  const dynamoType = typeMap[key] || (isNaN(filterValue) ? 'S' : 'N');
-                  expressionAttributeNames[attr] = key;
-                  filterExpressions.push(`${attr} = ${valAlias}`);
-                  expressionAttributeValues[valAlias] =
-                    dynamoType === 'N'
-                      ? { N: String(filterValue) }
-                      : { S: String(filterValue) };
+                    const dynamoType = typeMap[key] || (isNaN(filterValue) ? 'S' : 'N');
+                    expressionAttributeNames[attr] = key;
+                    filterExpressions.push(`${attr} = ${valAlias}`);
+                    expressionAttributeValues[valAlias] =
+                        dynamoType === 'N'
+                            ? { N: String(filterValue) }
+                            : { S: String(filterValue) };
                 }
-              });
-              
+            });
+
             if (filterExpressions.length > 0) {
                 params.FilterExpression = filterExpressions.join(' AND ');
                 params.ExpressionAttributeNames = expressionAttributeNames;
@@ -230,22 +239,6 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
                 logger.info(`[Segmento ${segment}] AttrNames: ${JSON.stringify(params.ExpressionAttributeNames)}`);
                 logger.info(`[Segmento ${segment}] AttrValues: ${JSON.stringify(params.ExpressionAttributeValues)}`);
             }
-
-                    if (operation !== "count") {
-                      params.ProjectionExpression = Object.keys(typeMap)
-                        .filter((attr) => attr !== "geometry")
-                        .map((attr) => `#${attr}`)
-                        .join(", ");
-                      params.ExpressionAttributeNames = {
-                        ...(params.ExpressionAttributeNames || {}),
-                        ...Object.fromEntries(
-                          Object.keys(typeMap)
-                            .filter((attr) => attr !== "geometry")
-                            .map((attr) => [`#${attr}`, attr])
-                        ),
-                      };
-                    }
-
         }
 
 
@@ -466,7 +459,7 @@ Consulta: "${prompt}"
 
     try {
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4.1-mini',
             temperature: 0,
             messages: [
                 { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
@@ -522,7 +515,10 @@ const createThread = async (req, res) => {
 
                 const finalFilters = normalizeFilters(formattedFilters);
                 const result = await parallelScan(tableName, finalFilters, 4, operation);
-                dbResults[tableName] = result; // Guardar solo el conteo si es COUNT
+
+                const cleanResult = stripGeometry(result);
+
+                dbResults[tableName] = cleanResult; // Guardar solo el conteo si es COUNT
 
                 if (!Object.keys(filters).length) {
                     warnings[tableName] = `No se aplicaron filtros en "${tableName}".`;
@@ -549,27 +545,25 @@ const createThread = async (req, res) => {
                 **Instrucción de la base de datos:**
                 Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
-            model: 'gpt-4o-mini',
+            model: 'gpt-4.1-mini',
             temperature: 0
         });
 
-        messageContent = `
-        ${prompt}
-            
-            Interpretación de la consulta:
-            ${JSON.stringify(dbQueryInfo, null, 2)}
-            
-            Resultados de la base de datos:
-            ${JSON.stringify(dbResults, null, 2)}`
 
-        logger.info(`Creando message de thread con id: ${thread.id} y mensaje: "${messageContent}, "`);
 
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
             content: `
-            ${messageContent}
-            `
+                            ${prompt}
+
+                            Interpretación de la consulta:
+                            ${JSON.stringify(dbQueryInfo, null, 2)}
+
+                            Resultados de la base de datos:
+                            ${JSON.stringify(dbResults, null, 2)}
+                        `
         });
+
 
 
         const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistant.id });
@@ -637,24 +631,29 @@ const sendMessageToThread = async (req, res) => {
 
                 const finalFilters = normalizeFilters(formattedFilters);
                 const result = await parallelScan(tableName, finalFilters, 4, operation);
-                dbResults[tableName] = result;
+
+                const cleanResult = stripGeometry(result);
+                dbResults[tableName] = cleanResult;
             }
         }
 
-        const messageContent = `${prompt}
+        const userMessage = `
+            ${prompt}
+            
             Interpretación de la consulta:
             ${JSON.stringify(dbQueryInfo, null, 2)}
             
             Resultados de la base de datos:
-            ${JSON.stringify(dbResults, null, 2)}`
+            ${JSON.stringify(dbResults, null, 2)}
+            `;
 
-        logger.info(`Enviando mensaje al thread con ID: ${threadId} y mensaje: "${messageContent}"`);
+        logger.info('---------------------------');
+        logger.info(`Enviando al LLM mensaje: ${userMessage}`);
+        logger.info('---------------------------');
 
         await openai.beta.threads.messages.create(threadId, {
             role: 'user',
-            content: `
-            ${messageContent}
-            `
+            content: userMessage
         });
 
         const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
