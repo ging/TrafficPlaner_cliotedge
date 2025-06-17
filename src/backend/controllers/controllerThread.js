@@ -246,6 +246,9 @@ const scanSegment = async (tableName, filters, segment, totalSegments, operation
             params.Select = "COUNT";
         }
 
+        logger.info(`>>> DynamoDB ScanCommand params (segmento ${segment}): ${JSON.stringify(params)}`);
+
+
         try {
             const command = operation === "count" ? new ScanCommand(params) : new ScanCommand(params);
             const result = await dynamoDB.send(command);
@@ -459,7 +462,7 @@ Consulta: "${prompt}"
 
     try {
         const response = await openai.chat.completions.create({
-            model: 'gpt-4.1-mini',
+            model: process.env.model,
             temperature: 0,
             messages: [
                 { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
@@ -545,7 +548,7 @@ const createThread = async (req, res) => {
                 **Instrucción de la base de datos:**
                 Si la pregunta es de tipo "¿Cuántos vehículos que cumplan esta condición hay?" Y se te pasa un número, ese es el número de vehículos que cumplen la condición.
             `,
-            model: 'gpt-4.1-mini',
+            model: process.env.model,
             temperature: 0
         });
 
