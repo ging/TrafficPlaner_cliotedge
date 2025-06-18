@@ -29,23 +29,17 @@ Execute the migration from src/backend
 node migrations/20250414171916-create-dynamodb-datos3cantos.js
 ```
 
-Copy the data from dynamo in src/backend/datos folder:
+Copy the data from dynamo in src/backend/datos/Datos3Cantos folder:
 
 - rt_car_access_by_device.json
 - rt_car_access.json
-- tf_waste_carbon_print.json
-- tf_waste_observed_routes.json
-- tf_waste_weights.json
-
-And add in src/backend/datos/data:
-- observed_routes.json
 - carbon_print.json
-
+- observed_routes.json
+- tf_waste_weights.json
 
 Upload the data
 ```	
 node seeders/loadData.js
-node seeders/loadDataBis.js
 ```	
 
 ## To run the test benchmark
