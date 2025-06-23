@@ -42,16 +42,25 @@ async function parallelScan(tableName, filters, segments, operation) {
 
     const mongoQuery = buildMongoFilters(filters);
 
-    // Si la operación es 'count', devolvemos solo el número
     if (operation === 'count') {
         const count = await Model.countDocuments(mongoQuery).exec();
         return [{ count }];
     }
 
-    // Por defecto hacemos find (simulando un 'scan')
+    if (operation === 'distinct_count') {
+        const distinctValues = await Model.distinct("resource_license_plate", mongoQuery);
+        return [{ count: distinctValues.length }];
+    }
+    if (operation === 'distinct') {
+        const distinctValues = await Model.distinct("resource_license_plate", mongoQuery);
+        return distinctValues.map(plate => ({ resource_license_plate: plate }));
+    }
+
+
     const results = await Model.find(mongoQuery).exec();
     return results;
 }
+
 
 
 function toMillis(value) {
@@ -195,6 +204,9 @@ IMPORTANTE:
   }
 - Si el usuario pide un rango de fechas, haz un "type": "between" con "start" y "end".
 - Si la pregunta menciona cualquier otro atributo de tf_waste_weights (por ejemplo municipality, waste_type, address_name, hour_observed, device_id, postal_code, etc.), devuelve un filtro de igualdad (o rango si aplica) sobre ese campo.  
+- Si la pregunta busca contar **vehículos únicos** u otros campos únicos que han realizado recogidas (por ejemplo: "¿Cuántos vehículos de recogida hay en Tres Cantos?") usa "operation": "distinct_count" en lugar de "scan". Esto devolverá un conteo de vehículos únicos.
+- Si el usuario pregunta por **las matrículas** o **cuáles son los vehículos** (por ejemplo: "¿y cuáles son sus matrículas?", "¿qué vehículos han operado?"), utiliza "operation": "distinct" en lugar de "distinct_count" para que se devuelvan las entradas únicas, no solo la cuenta.
+
 
 TABLAS DISPONIBLES Y EJEMPLOS DE REGISTROS:
 
