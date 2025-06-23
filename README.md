@@ -26,7 +26,7 @@ Open http://localhost:3002 and start asking...
 
 Execute the migration from src/backend
 ```
-node migrations/20250414171916-create-dynamodb-datos3cantos.js
+node migrations/20250623121150-create-mongo
 ```
 
 Copy the data from dynamo in src/backend/datos/Datos3Cantos folder:
@@ -39,7 +39,7 @@ Copy the data from dynamo in src/backend/datos/Datos3Cantos folder:
 
 Upload the data
 ```	
-node seeders/loadData.js
+node seeders/loadDataMongo.js
 ```	
 
 ## To run the test benchmark
