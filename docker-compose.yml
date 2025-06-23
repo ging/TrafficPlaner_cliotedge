@@ -9,8 +9,8 @@ services:
       - ./src/backend/.env  
     depends_on:
       - cliotedge-postgres
-      - dynamodb-local  
-
+      # - dynamodb-local  
+      - mongo
   cliotedge-postgres:
     image: postgres:17
     container_name: cliotedge-postgres
@@ -21,16 +21,29 @@ services:
     volumes:
       - cliotedge-postgres_data:/var/lib/postgresql/data
 
-  dynamodb-local:
-    image: amazon/dynamodb-local
-    container_name: dynamodb-local
+  # dynamodb-local:
+  #   image: amazon/dynamodb-local
+  #   container_name: dynamodb-local
+  #   ports:
+  #     - "8000:8000"
+  #   command: ["-jar", "DynamoDBLocal.jar", "-sharedDb"]
+  #   volumes:
+  #     - dynamodb_data:/home/dynamodblocal
+  #   working_dir: /home/dynamodblocal
+
+  mongo:
+    image: mongo:6.0
     ports:
-      - "8000:8000"
-    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb"]
+      - "27017:27017"
+    env_file:
+      - ./src/backend/.env  
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME
+      - MONGO_INITDB_ROOT_PASSWORD
     volumes:
-      - dynamodb_data:/home/dynamodblocal
-    working_dir: /home/dynamodblocal
+      - mongo_data:/data/db
 
 volumes:
   cliotedge-postgres_data:
-  dynamodb_data:  
+  # dynamodb_data:
+  mongo_data:

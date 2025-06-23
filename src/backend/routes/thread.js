@@ -1,5 +1,5 @@
 const express = require('express');
-const controllerThread = require('../controllers/controllerThread');
+const controllerThread = require('../controllers/controllerThreadMongoDB');
 const authMiddleware = require('../middlewares/authenticationMiddlewares');
 
 const router = express.Router();
