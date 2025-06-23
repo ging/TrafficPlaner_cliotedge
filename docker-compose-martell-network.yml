@@ -9,7 +9,8 @@ services:
       - martell
     restart: unless-stopped
 
-  dynamodb-local:
+  #dynamodb-local:
+  mongo:
     networks:
       - martell
     restart: unless-stopped

@@ -34,7 +34,7 @@ services:
   mongo:
     image: mongo:6.0
     ports:
-      - "27019:27019"
+      - "27019:27017"
     env_file:
       - ./src/backend/.env  
     environment:
