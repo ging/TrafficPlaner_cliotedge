@@ -1,6 +1,7 @@
 const express = require('express');
 const controllerThread = require('../controllers/controllerThreadMongoDB');
 const authMiddleware = require('../middlewares/authenticationMiddlewares');
+const railMiddleware = require('../middlewares/railMiddleware');
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ router.post('/login', authController.login);
 router.post('/create', authMiddleware, controllerThread.createThread);
 
 // Enviar un mensaje en un thread existente
-router.post('/message', authMiddleware, controllerThread.sendMessageToThread);
+router.post('/message', authMiddleware, railMiddleware, controllerThread.sendMessageToThread);
 
 router.delete('/delete/:threadId', authMiddleware, controllerThread.deleteThread);
 
