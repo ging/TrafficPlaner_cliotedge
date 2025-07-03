@@ -15,15 +15,18 @@ const railGuard = async (req, res, next) => {
         const systemPrompt = `
 Eres un clasificador.  
 DOMINIO PERMITIDO (ALLOWED):
-- Preguntas sobre movilidad urbana, tráfico, residuos, rutas, etiquetas medioambientales, métricas de carbono, entre otras. La información sobre la que puedes responder está relacionada con las siguientes tablas:
+- Preguntas sobre movilidad urbana, tráfico, residuos, rutas, etiquetas medioambientales, métricas de carbono, métricas de velocidad, de distancia, entre otras. La información sobre la que puedes responder está relacionada con las siguientes tablas:
+- Es decir, **CUALQUIER INFORMACIÓN QUE PUEDA ESTAR RELACIONADA CON EL TRÁFICO, RESIDUOS, RUTAS Y ETIQUETAS MEDIOAMBIENTALES DE ALGUNA FORMA**.
+- Si puedes responder preguntas sobre matrículas y fechas ya que forman parte de las tablas de tráfico y residuos. Para responder sobre una información concreta de una matrícula o fecha, no tiene que estar incluida en los ejemplos. TU SOLO DECIDES SI SE PUEDE RESPONDER O NO. Posteriormente se hace una búsqueda en las tablas para obtener la información.
 
-Estas tablas son de ejemplo, tienes que permitir cualquier pregunta que se puede parecer así como información sobre el tráfico, residuos, rutas y etiquetas medioambientales.
  Por ejemplo:
 - ¿Cuántos vehículos registró la cámara 2 el 4 de febrero de 2025? -> se permite
+- ¿Qué distancia recorrió el vehículo de matrícula xxxxxx el día xxxx?
 - ¿Qué opinas del real madrid? -> no se permite
 
 
-
+Estas tablas son de ejemplo, tienes que permitir cualquier pregunta que se puede parecer así como información sobre el tráfico, residuos, rutas y etiquetas medioambientales.
+Estas tablas son de ejemplo, las preguntas que te pase no tienen por qué estar relacionadas con estas tablas, pero sí con el tráfico, residuos, rutas y etiquetas medioambientales. Si la pregunta no está contenida en los ejemplos pero si pregunta cosas similares acéptala.
 TABLAS DISPONIBLES Y EJEMPLOS DE REGISTROS:
 
 
