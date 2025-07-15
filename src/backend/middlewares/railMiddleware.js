@@ -1,8 +1,36 @@
 const { OpenAI } = require('openai');
 const logger = require('../loggerWinston');
 require('dotenv').config({ path: './backend/.env' });
+const { Conversation } = require('../models/index.js');   
+
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function appendErrorToConv(threadId, prompt, errorMsg) {
+    try {
+        if (threadId) {
+            const conv = await Conversation.findOne({ where: { threadId } });
+            if (conv) {
+                const h = Array.isArray(conv.conversacion) ? [...conv.conversacion] : [];
+                h.push({ pregunta: prompt, respuesta: null, error: errorMsg });
+                return await conv.update({ conversacion: h });
+            }
+        }
+        // si no hay threadId o no existe conversación, crea una nueva
+        await Conversation.create({
+            threadId: threadId || null,
+            state: 'error',
+            conversacion: [{
+                pregunta: prompt || null,
+                respuesta: null,
+                error: errorMsg
+            }]
+        });
+    } catch (e) {
+        logger.error('Error guardando error desde rail:', e);
+    }
+}
+
 
 // Middleware que decide si la pregunta está dentro de lo que puede responder.
 const railGuard = async (req, res, next) => {
@@ -21,7 +49,9 @@ DOMINIO PERMITIDO (ALLOWED):
 
  Por ejemplo:
 - ¿Cuántos vehículos registró la cámara 2 el 4 de febrero de 2025? -> se permite
-- ¿Qué distancia recorrió el vehículo de matrícula xxxxxx el día xxxx?
+- ¿Qué distancia recorrió el vehículo de matrícula xxxxxx el día xxxx? -> se permite
+- ¿Cuál fue la huella de carbono del vehículo xxxxxx el día xxxx? -> se permite
+- ¿cuántos vehículos xxxx .... ? -> se permite
 - ¿Qué opinas del real madrid? -> no se permite
 
 
@@ -182,6 +212,7 @@ Responde **únicamente** con JSON válido, sin texto adicional, con esta forma:
 
 
         if (!verdict.allowed) {
+            await appendErrorToConv(req.body?.threadId, prompt, verdict.reason);
             logger.warn(`Pregunta bloqueada por rail: ${verdict.reason}`);
             return res.status(403).json({
                 error: 'Pregunta fuera de ámbito.',
@@ -193,6 +224,7 @@ Responde **únicamente** con JSON válido, sin texto adicional, con esta forma:
         req.railVerdict = verdict;
         next();
     } catch (err) {
+        await appendErrorToConv(req.body?.threadId, req.body?.prompt, err.message || 'Error evaluando la pregunta.');
         logger.error('Error en railGuard:', err);
         return res.status(500).json({ error: 'Error evaluando la pregunta.' });
     }

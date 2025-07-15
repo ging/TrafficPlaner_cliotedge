@@ -398,6 +398,7 @@ Consulta: "${prompt}"
 
 // Crear un nuevo thread de conversación con el asistente de OpenAI.
 const createThread = async (req, res) => {
+    let thread;
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -435,7 +436,7 @@ const createThread = async (req, res) => {
             }
         }
 
-        const thread = await openai.beta.threads.create({});
+        thread = await openai.beta.threads.create({});
         const assistant = await openai.beta.assistants.create({
             instructions: `
                 Eres un experto en tráfico y movilidad.  
@@ -491,7 +492,11 @@ const createThread = async (req, res) => {
         const assistantResponse = messages.data.find(m => m.role === 'assistant')?.content[0];
 
         // Guardar la conversación en la base de datos como activa
-        await createConversation(thread.id);
+        await createConversation(thread.id, {
+            pregunta: prompt,
+            respuesta: assistantResponse,
+            error: null
+        });
 
         // Responder incluyendo además los posibles avisos y la interpretación de la consulta
         res.send({
@@ -504,6 +509,12 @@ const createThread = async (req, res) => {
         });
 
     } catch (error) {
+        await appendToConversation(thread?.id || null, {
+            pregunta: req.body?.prompt || null,
+            respuesta: null,
+            error: String(error.message || error)
+        });
+
         logger.error('Error en createThread:', error);
         res.status(500).send({ error: 'Error en la creación del thread.' });
     }
@@ -581,9 +592,27 @@ const sendMessageToThread = async (req, res) => {
         const messages = await openai.beta.threads.messages.list(threadId);
         const assistantResponse = messages.data.find(m => m.role === 'assistant')?.content[0];
 
+        try {
+            const conv = await Conversation.findOne({ where: { threadId } });
+            if (conv) {
+                const historial = Array.isArray(conv.conversacion) ? [...conv.conversacion] : [];
+                historial.push({ pregunta: prompt, respuesta: assistantResponse, error: null });
+                await conv.update({ conversacion: historial });
+            }
+        } catch (dbErr) {
+            logger.error('Error actualizando conversación:', dbErr);
+        }
+
         res.send({ response: assistantResponse });
 
     } catch (error) {
+
+        await appendToConversation(req.body?.threadId, {
+            pregunta: req.body?.prompt || null,
+            respuesta: null,
+            error: String(error.message || error)
+        });
+
         logger.error('Error enviando mensaje al thread:', error);
         res.status(500).send({ error: 'Error enviando mensaje al thread.' });
     }
@@ -611,11 +640,12 @@ const deleteThread = async (req, res) => {
 };
 
 // Función para crear una conversación en la base de datos 
-const createConversation = async (threadId) => {
+const createConversation = async (threadId, primerTurno) => {
     try {
         const newConversation = await Conversation.create({
             threadId,
-            state: 'activa'
+            state: 'activa',
+            conversacion: [primerTurno]
         });
         logger.info('Nueva conversación creada:', newConversation);
     } catch (error) {
@@ -636,6 +666,16 @@ const updateConversation = async (threadId, nuevoState) => {
         }
     } catch (error) {
         logger.error('Error actualizando la conversación:', error);
+    }
+};
+
+const appendToConversation = async (threadId, data) => {
+    if (!threadId) return;
+    const conv = await Conversation.findOne({ where: { threadId } });
+    if (conv) {
+        const h = Array.isArray(conv.conversacion) ? [...conv.conversacion] : [];
+        h.push(data);
+        await conv.update({ conversacion: h });
     }
 };
 

@@ -1,4 +1,4 @@
-const mongoose = require('../config/db.js');
+const mongoose = require('../config/config.js');
 
 async function up() {
   const db = mongoose.connection.db;

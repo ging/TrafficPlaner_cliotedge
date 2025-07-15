@@ -15,7 +15,12 @@ module.exports = (sequelize, DataTypes) => {
   }
   Conversation.init({
     threadId: DataTypes.STRING,
-    state: DataTypes.STRING
+    state: DataTypes.STRING,
+    conversacion: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: []
+    }
   }, {
     sequelize,
     modelName: 'Conversation',

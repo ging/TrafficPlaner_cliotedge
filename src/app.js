@@ -70,7 +70,7 @@ app.use(path.join('/',CONTEXT, 'threads'), threadRouter);
 
 
 // Sincroniza la base de datos y configura el servidor
-sequelize.sync()
+sequelize.sync( {alter: true} )
     .then(() => {
         logger.info('Conectado a la base de datos');
         // Iniciar el servidor solo después de la conexión a la base de datos
