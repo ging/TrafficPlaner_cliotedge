@@ -47,3 +47,10 @@ Execute from src/pruebas
 ```
 node benchmark.js
 ```
+
+
+## Guardarrailes 
+
+Se ha implementado un middleware (railMiddleware.js) donde se permite o no responder a las preguntas del usuario en función del tema sobre el que se está preguntando.
+
+Esto se realiza mediante una llamada al modelo donde se envía la pregunta del usuario y una serie de instrucciones sobre lo que puede responder y lo que no. Como respuesta se recibe un JSON con un booleano que indica si se permite o no responder a la pregunta y una descripción del motivo.
