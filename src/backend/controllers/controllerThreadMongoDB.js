@@ -181,7 +181,7 @@ function buildMongoFilters(filters) {
 //- Para cada tabla, si se deben aplicar filtros.
 const analyzePromptForDBQuery = async (prompt) => {
     const dbPrompt = `
-Analiza la siguiente consulta del usuario y determina qué tablas de la base de datos DynamoDB deben ser consultadas y, para cada tabla, si es necesario, indica los filtros a aplicar.
+Analiza la siguiente consulta del usuario y determina qué tablas de la base de datos Mongo deben ser consultadas y, para cada tabla, si es necesario, indica los filtros a aplicar.
 
 IMPORTANTE:
 - Para una consulta normal se usa "operation": "scan".
@@ -193,7 +193,7 @@ IMPORTANTE:
 - No pongas timestamps, solo el ISO string.
 - El backend se encargará de convertirlos a milisegundos correctamente.
 - Cuándo te pregunten por una fecha, te están preguntando por el huso horario de Madrid. Es decir, la zona horaria de Europa Central. De esta forma por ejemplo, el martes 1 de octubre de 2024 en mi zona horaria es 1727733600000.
-- El campo "day_observed" está definido como número (N) en DynamoDB. 
+- El campo "day_observed" está definido como número (N) en Mongo. 
 - Por lo tanto, **NO** uses "begins_with" con "day_observed".  
 - Los ids de las cámaras empiezan con "CT". Por ejemplo el id de la cámara 12 es "CT12". Siempre es CT y dos dígitos. Por ejemplo: CT04.
   Ejemplo:  
@@ -370,7 +370,7 @@ Consulta: "${prompt}"
             model: process.env.model,
             temperature: 0,
             messages: [
-                { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para DynamoDB. Responde solo en JSON válido sin agregar texto adicional.' },
+                { role: 'system', content: 'Eres un asistente que ayuda a interpretar consultas para Mongo. Responde solo en JSON válido sin agregar texto adicional.' },
                 { role: 'user', content: dbPrompt }
             ]
         });

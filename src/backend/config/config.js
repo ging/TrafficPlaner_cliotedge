@@ -1,19 +1,10 @@
 const path = require('path');
 const process = require('process');
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 require('dotenv').config({
   path: path.resolve(__dirname, '.env')
 });
 
 
-const dynamoDB = new DynamoDBClient({
-    region: process.env.DYNAMODB_REGION,
-    endpoint: process.env.DYNAMODB_ENDPOINT,
-    credentials: {
-        accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID,
-        secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY
-    }
-});
 
 
 require('dotenv').config({
@@ -39,7 +30,6 @@ module.exports = mongoose;
 
 
 module.exports = {
-    dynamoDB,
     "development": {
         "username": process.env.POSTGRES_USER,
         "password": process.env.POSTGRES_PASSWORD,

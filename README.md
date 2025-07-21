@@ -29,7 +29,8 @@ Execute the migration from src/backend
 node migrations/20250623121150-create-mongo
 ```
 
-Copy the data from dynamo in src/backend/datos/Datos3Cantos folder:
+Downnload the data from https://drive.upm.es/s/P5k32snD6QBCq6w (requires password). Data from 1 Nov 2024 to 25 May 2024
+Copy the data from dynamo (real database) in src/backend/datos/Datos3Cantos folder:
 
 - rt_car_access_by_device.json
 - rt_car_access.json
